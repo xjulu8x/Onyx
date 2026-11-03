@@ -1,0 +1,51 @@
+<Window x:Class="DesktopOverlay.FlyoutWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Flyout" Width="380" SizeToContent="Height"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ShowInTaskbar="False" ResizeMode="NoResize" Topmost="True"
+        FontFamily="{StaticResource Ui}" Foreground="White"
+        Deactivated="Window_Deactivated" PreviewKeyDown="Window_PreviewKeyDown">
+    <Window.Resources>
+        <Style x:Key="Tile" TargetType="Button">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Height" Value="64"/>
+            <Setter Property="Margin" Value="4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="b" Background="#14FFFFFF" CornerRadius="14" Padding="10,8">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="#24FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="#33FFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="Row" TargetType="Button" BasedOn="{StaticResource Tile}">
+            <Setter Property="Height" Value="Auto"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Margin" Value="0,2"/>
+        </Style>
+    </Window.Resources>
+
+    <Border x:Name="Panel" Margin="10" CornerRadius="24" Background="#FA060608" BorderBrush="#24FFFFFF" BorderThickness="1"
+            Padding="18">
+        <Border.RenderTransform>
+            <TranslateTransform x:Name="Slide" Y="24"/>
+        </Border.RenderTransform>
+        <!-- Scrolls instead of running off screen when the content is taller than the space above the taskbar -->
+        <ScrollViewer x:Name="Scroller" VerticalScrollBarVisibility="Hidden" Focusable="False" PanningMode="VerticalOnly">
+            <ContentControl x:Name="Host" Focusable="False"/>
+        </ScrollViewer>
+    </Border>
+</Window>

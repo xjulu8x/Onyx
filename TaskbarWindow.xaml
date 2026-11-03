@@ -1,0 +1,86 @@
+﻿<Window x:Class="DesktopOverlay.TaskbarWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Taskbar" Height="50" Width="800"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ShowInTaskbar="False" ResizeMode="NoResize" Topmost="True"
+        FontFamily="{StaticResource Ui}" Foreground="White">
+    <Window.Resources>
+        <Style x:Key="TrayButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+    </Window.Resources>
+    <Grid x:Name="Root" MouseRightButtonUp="Bar_RightClick">
+        <!-- Dark, slightly see-through bar; rounded corners are anti-aliased by WPF since the window is per-pixel transparent. -->
+        <!-- Even, soft rim; not pixel-snapped so the rounded corners stay smoothly anti-aliased -->
+        <Border x:Name="Bg" CornerRadius="16" Background="#14000000" BorderThickness="1" BorderBrush="#1FFFFFFF" SnapsToDevicePixels="False"/>
+
+        <!-- Left: now playing -->
+        <Border x:Name="MediaChip" HorizontalAlignment="Left" Margin="10,6" CornerRadius="12" Background="#01000000"
+                MouseEnter="Media_MouseEnter" MouseLeave="Media_MouseLeave" MaxWidth="320" Visibility="Collapsed">
+            <Grid Margin="6,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border x:Name="Art" Width="30" Height="30" CornerRadius="6" Background="#22FFFFFF" Cursor="Hand" MouseLeftButtonUp="Art_Click">
+                    <TextBlock x:Name="ArtIcon" Text="&#xE8D6;" FontFamily="{StaticResource Icons}" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,6,0" Effect="{StaticResource TextShadow}">
+                    <TextBlock x:Name="TitleText" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock x:Name="ArtistText" FontSize="10" Foreground="{StaticResource Dim}" TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+                <StackPanel x:Name="MediaControls" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Opacity="0">
+                    <Button Style="{StaticResource IconButton}" Content="&#xE892;" FontSize="11" Click="Prev_Click"/>
+                    <Button x:Name="PlayBtn" Style="{StaticResource IconButton}" Content="&#xE768;" FontSize="12" Click="Play_Click"/>
+                    <Button Style="{StaticResource IconButton}" Content="&#xE893;" FontSize="11" Click="Next_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Center: start + apps -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+            <Border x:Name="StartBtn" Width="46" Height="44" CornerRadius="12" Background="#01000000" Cursor="Hand"
+                    MouseLeftButtonUp="Start_Click" MouseEnter="Hover_Enter" MouseLeave="Hover_Leave" ToolTip="Start">
+                <Grid Width="22" Height="22">
+                    <Grid.Resources>
+                        <LinearGradientBrush x:Key="Logo" StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#7CD3FF" Offset="0"/>
+                            <GradientStop Color="#1E8CFF" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Grid.Resources>
+                    <Rectangle Width="10.5" Height="10.5" RadiusX="1.5" RadiusY="1.5" Fill="{StaticResource Logo}" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                    <Rectangle Width="10.5" Height="10.5" RadiusX="1.5" RadiusY="1.5" Fill="{StaticResource Logo}" HorizontalAlignment="Right" VerticalAlignment="Top"/>
+                    <Rectangle Width="10.5" Height="10.5" RadiusX="1.5" RadiusY="1.5" Fill="{StaticResource Logo}" HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
+                    <Rectangle Width="10.5" Height="10.5" RadiusX="1.5" RadiusY="1.5" Fill="{StaticResource Logo}" HorizontalAlignment="Right" VerticalAlignment="Bottom"/>
+                </Grid>
+            </Border>
+            <StackPanel x:Name="AppsPanel" Orientation="Horizontal"/>
+        </StackPanel>
+
+        <!-- Right: tray -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,10,0" Effect="{StaticResource TextShadow}">
+            <Button x:Name="NetBtn" Style="{StaticResource TrayButton}" Content="&#xE701;" Click="Network_Click" ToolTip="Netzwerk"/>
+            <Button x:Name="VolBtn" Style="{StaticResource TrayButton}" Content="&#xE767;" Click="Volume_Click"
+                    MouseWheel="Vol_Wheel" ToolTip="Lautst&#xE4;rke (Mausrad)"/>
+            <Button Style="{StaticResource TrayButton}" Click="Center_Click" Padding="10,4" ToolTip="Kalender">
+                <StackPanel>
+                    <TextBlock x:Name="TimeText" FontFamily="{StaticResource Ui}" FontSize="12" HorizontalAlignment="Right"/>
+                    <TextBlock x:Name="DateText" FontFamily="{StaticResource Ui}" FontSize="11" HorizontalAlignment="Right" Foreground="{StaticResource Dim}"/>
+                </StackPanel>
+            </Button>
+            <!-- Action center: a labelled pill at the far right so it is easy to find -->
+            <Button Style="{StaticResource TrayButton}" Click="Center_Click" Padding="12,7" Margin="4,0,0,0" Background="#1FFFFFFF"
+                    ToolTip="Aktivit&#xE4;tszentrum &#xF6;ffnen">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE91C;" FontSize="14" VerticalAlignment="Center"/>
+                    <TextBlock Text="Aktivit&#xE4;tszentrum" FontFamily="{StaticResource Ui}" FontSize="11" FontWeight="SemiBold"
+                               Margin="7,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+        </StackPanel>
+    </Grid>
+</Window>
