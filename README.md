@@ -1,50 +1,137 @@
+<div align="center">
+
+<img src="docs/logo.png" width="128" alt="Onyx Logo"/>
+
 # Onyx
 
-Ein minimalistisches Desktop-Overlay für Windows 11: eine **Dynamic Island** oben in der Mitte, eine eigene **schwebende Taskleiste** und dezente **Desktop-Widgets** – alles im dunklen, leicht transparenten Look.
+**Dynamic Island, schwebende Taskleiste und Desktop-Widgets für Windows 11**
 
-## Download
+Dunkel, minimalistisch, leicht transparent – ein Desktop, der sich wie aus einem Guss anfühlt.
 
-Die neueste Version gibt es immer unter **[Releases](../../releases/latest)** → `Onyx.exe` herunterladen und starten. Keine Installation nötig.
+[![Download](https://img.shields.io/github/v/release/xjulu8x/Onyx?label=Download&style=for-the-badge&color=2B8CFF)](https://github.com/xjulu8x/Onyx/releases/latest)
+![Windows 11](https://img.shields.io/badge/Windows-11-0B1A36?style=for-the-badge&logo=windows11&logoColor=white)
+![.NET 8](https://img.shields.io/badge/.NET-8-1E1F23?style=for-the-badge&logo=dotnet&logoColor=white)
 
-> Für die CPU-Temperatur braucht Onyx Adminrechte und den Treiber **PawnIO**. Fehlt etwas, steht unter dem CPU-Widget „Admin nötig“ bzw. „Treiber fehlt“ – ein Klick darauf behebt es.
+[**⬇ Neueste Version herunterladen**](https://github.com/xjulu8x/Onyx/releases/latest)
 
-## Funktionen
+</div>
 
-**Dynamic Island**
-- Zeigt das aktuelle Lied (Spotify, Browser, …) mit Cover, Fortschritt und Steuerung
-- Klappt beim Darüberfahren weich auf: CPU, RAM, Netzwerk und Lautstärkeregler
-- Zahnrad öffnet die Einstellungen direkt in der Island
+---
 
-**Taskleiste**
-- Ersetzt die Windows-Taskleiste, schwebend und abgerundet
-- Angepinnte Apps in derselben Reihenfolge wie bei Windows, mit Animationen
-- Eigene Popups für Netzwerk, Lautstärke und Aktivitätszentrum (inkl. laufender Apps, die man beenden kann)
-- Eigenes Startmenü mit Suche über alle installierten Apps
-- Rechtsklick: Task-Manager und Taskleisten-Einstellungen (Transparenz, automatisch einklappen)
-- Verschwindet in Vollbild-Spielen; mit der Windows-Taste kommt sie zurück, bis man wieder ins Spiel klickt
+## ✨ Was ist Onyx?
 
-**Widgets**
-- Download, Upload, Ping, GPU-Temperatur, CPU-Verlauf, RAM und Festplatten
-- CPU-Temperatur unten rechts
-- Frei anordnen über „Widgets anordnen“ in den Island-Einstellungen
+Onyx legt sich über deinen Windows-Desktop und ersetzt die Taskleiste durch ein eigenes, ruhiges Design:
 
-**Einstellungen**
-- Farben für Island, Taskleiste und Widgets
-- Mit Windows starten (mit Adminrechten, damit die Temperatur funktioniert)
-- Alles wird in `%APPDATA%\Onyx\settings.json` gespeichert
+| | |
+|---|---|
+| 🏝️ **Dynamic Island** | Oben in der Mitte – zeigt das aktuelle Lied, klappt beim Darüberfahren auf und zeigt CPU, RAM, Netzwerk und Lautstärke. |
+| 📌 **Eigene Taskleiste** | Schwebend und abgerundet, mit deinen angepinnten Apps, eigenem Startmenü und eigenen Popups. |
+| 📊 **Desktop-Widgets** | Netzwerk, GPU- und CPU-Temperatur, CPU-Verlauf, RAM und Festplatten – frei anordnen. |
+| 🎨 **Anpassbar** | Farben, Transparenz, automatisches Einklappen, Autostart. |
 
-## Selbst bauen
+---
+
+## 🚀 Installation
+
+1. **[Onyx.exe herunterladen](https://github.com/xjulu8x/Onyx/releases/latest)** (unter „Assets“).
+2. Die Datei an einen festen Ort legen, z. B. `Dokumente\Onyx\Onyx.exe`.
+3. **Doppelklick** auf `Onyx.exe` – fertig. Keine Installation, kein .NET nötig.
+
+> **Windows SmartScreen** kann beim ersten Start warnen („Der Computer wurde durch Windows geschützt“), weil die App nicht signiert ist.
+> Klicke auf **„Weitere Informationen“ → „Trotzdem ausführen“**.
+
+### 🌡️ CPU-Temperatur aktivieren
+
+Für die CPU-Temperatur braucht Onyx **Adminrechte** und den Treiber **PawnIO**. Unter dem CPU-Widget unten rechts steht, was fehlt:
+
+- **„Admin nötig · klicken“** → Klick startet Onyx mit Adminrechten neu.
+- **„Treiber fehlt · klicken“** → Klick installiert PawnIO automatisch (über winget).
+
+Danach erscheint die Temperatur von selbst.
+
+### 🔁 Mit Windows starten
+
+Island aufklappen → **Zahnrad** → **„Mit Windows starten“** einschalten.
+Läuft Onyx dabei als Admin, startet es später automatisch mit Adminrechten (ohne Nachfrage), damit die Temperatur funktioniert.
+
+---
+
+## 🧭 Bedienung
+
+### Dynamic Island
+| Aktion | Ergebnis |
+|---|---|
+| Maus darüber | Island klappt auf (Player, CPU, RAM, Netzwerk, Lautstärke) |
+| Klick auf das Cover | Play / Pause |
+| **Zahnrad** | Einstellungen in der Island |
+| Rechtsklick | Schnellmenü inkl. **Beenden** |
+
+### Taskleiste
+| Aktion | Ergebnis |
+|---|---|
+| **Windows-Taste** / Start-Logo | Eigenes Startmenü mit Suche über alle Apps |
+| Klick auf App | Öffnen bzw. in den Vordergrund holen |
+| Rechtsklick auf App | Neues Fenster / Fenster schließen |
+| Rechtsklick auf freie Stelle | **Task-Manager** und **Taskleisteneinstellungen** |
+| WLAN- / Lautstärke-Symbol | Eigene Popups |
+| **Aktivitätszentrum** | Schnellaktionen, Benachrichtigungen, laufende Apps beenden, Kalender |
+
+**In Vollbild-Spielen** verschwindet die Taskleiste automatisch. Mit der **Windows-Taste** kommt sie zurück, bis du wieder ins Spiel klickst.
+
+### Taskleisteneinstellungen
+Rechtsklick auf die Taskleiste → **Taskleisteneinstellungen**:
+- **Transparenz** – Regler von undurchsichtig bis sehr durchsichtig
+- **Automatisch einklappen** – Leiste erscheint erst, wenn die Maus den unteren Rand berührt
+
+### Widgets anordnen
+Island → Zahnrad → **„Widgets anordnen“** → Widgets mit der Maus verschieben → **„Fertig“**.
+Die Positionen bleiben auch nach einem Neustart gespeichert.
+
+### Farben
+Island → Zahnrad → unten **Island / Leiste / Widgets** wählen und eine Farbe anklicken.
+
+---
+
+## ❓ Häufige Fragen
+
+<details>
+<summary><b>Wie beende ich Onyx?</b></summary>
+
+Rechtsklick auf die Island → **Beenden** (oder Zahnrad → „Beenden“). Die normale Windows-Taskleiste kommt dann sofort zurück.
+</details>
+
+<details>
+<summary><b>Die Windows-Taskleiste ist nach einem Absturz weg</b></summary>
+
+Onyx einfach erneut starten und über „Beenden“ schließen – oder im Task-Manager „Windows-Explorer“ neu starten.
+</details>
+
+<details>
+<summary><b>Wo werden die Einstellungen gespeichert?</b></summary>
+
+In `%APPDATA%\Onyx\settings.json`. Zum Zurücksetzen Onyx beenden und die Datei löschen.
+</details>
+
+<details>
+<summary><b>Wie deinstalliere ich Onyx?</b></summary>
+
+1. In den Einstellungen „Mit Windows starten“ ausschalten.
+2. Onyx beenden.
+3. `Onyx.exe` und den Ordner `%APPDATA%\Onyx` löschen.
+</details>
+
+---
+
+## 🛠️ Selbst bauen
 
 Voraussetzung: [.NET 8 SDK](https://dotnet.microsoft.com/download) unter Windows.
 
 ```bash
+git clone https://github.com/xjulu8x/Onyx.git
+cd Onyx
 dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
 ```
 
 Die fertige Datei liegt danach in `publish/Onyx.exe`.
 
-## Technik
-
-C# / WPF auf .NET 8 · [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) für Temperaturen · Windows-Media-Steuerung über die System-Media-Transport-Controls
-
-Beenden: Rechtsklick auf die Island → „Beenden“ (die normale Windows-Taskleiste kommt dann zurück).
+**Technik:** C# · WPF · .NET 8 · [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) (Temperaturen) · Windows Media Controls (Musik)
