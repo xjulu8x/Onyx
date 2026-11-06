@@ -33,6 +33,63 @@ internal static class Theme
     public static double Speed => Settings.Current.AnimationSpeed switch { 0 => 0.6, 2 => 0, _ => 1 };
     public static TimeSpan Ms(double ms) => TimeSpan.FromMilliseconds(ms * Speed);
 
+    /// <summary>Background of a surface: plain, or a tiled fine grain. Either way it is one static brush with no running cost.</summary>
+    public static Brush Surface(string hex, byte alpha)
+    {
+        var color = Settings.ToColor(hex, alpha, Color.FromRgb(0x06, 0x06, 0x08));
+        if (!Settings.Current.Grain) return new SolidColorBrush(color);
+        const int size = 128;
+        var random = new Random(7); // same pattern every time
+        var px = new byte[size * size * 4];
+        for (int i = 0; i < px.Length; i += 4)
+        {
+            int noise = random.Next(-9, 10);
+            px[i] = (byte)Math.Clamp(color.B + noise, 0, 255);
+            px[i + 1] = (byte)Math.Clamp(color.G + noise, 0, 255);
+            px[i + 2] = (byte)Math.Clamp(color.R + noise, 0, 255);
+            px[i + 3] = alpha;
+        }
+        var tile = System.Windows.Media.Imaging.BitmapSource.Create(size, size, 96, 96, PixelFormats.Bgra32, null, px, size * 4);
+        tile.Freeze();
+        var brush = new ImageBrush(tile) { TileMode = TileMode.Tile, ViewportUnits = BrushMappingMode.Absolute, Viewport = new Rect(0, 0, size, size), Stretch = Stretch.None };
+        brush.Freeze();
+        return brush;
+    }
+
+    private static LinearGradientBrush _lightRun;
+
+    /// <summary>Rim brush and width. "subtle" is the quiet default of the taskbar; the island has no rim in that style.</summary>
+    public static (Brush Brush, double Width) Rim(bool subtle)
+    {
+        var accent = Accent;
+        switch (Settings.Current.RimStyle)
+        {
+            case 1 when subtle: return (new SolidColorBrush(Color.FromArgb(0x1F, 255, 255, 255)), 1);
+            case 2: return (new SolidColorBrush(Color.FromArgb(0xA0, accent.R, accent.G, accent.B)), 1);
+            case 3: return (LightRun(), 1);
+            default: return (Brushes.Transparent, 0);
+        }
+    }
+
+    /// <summary>A soft highlight turning slowly around the edge. Limited to 12 frames per second; hidden windows don't redraw it.</summary>
+    private static Brush LightRun()
+    {
+        var accent = Accent;
+        if (_lightRun == null)
+        {
+            var rotate = new RotateTransform(0, 0.5, 0.5);
+            _lightRun = new LinearGradientBrush { StartPoint = new Point(0, 0.5), EndPoint = new Point(1, 0.5), RelativeTransform = rotate };
+            var spin = new System.Windows.Media.Animation.DoubleAnimation(0, 360, TimeSpan.FromSeconds(9)) { RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever };
+            System.Windows.Media.Animation.Timeline.SetDesiredFrameRate(spin, 12);
+            rotate.BeginAnimation(RotateTransform.AngleProperty, spin);
+        }
+        _lightRun.GradientStops.Clear();
+        _lightRun.GradientStops.Add(new GradientStop(Color.FromArgb(0x18, 255, 255, 255), 0));
+        _lightRun.GradientStops.Add(new GradientStop(Color.FromArgb(0xE0, accent.R, accent.G, accent.B), 0.5));
+        _lightRun.GradientStops.Add(new GradientStop(Color.FromArgb(0x18, 255, 255, 255), 1));
+        return _lightRun;
+    }
+
     public static void ApplyFont() => Application.Current.Resources["Ui"] = new FontFamily(Settings.Current.FontFamily);
 
     /// <summary>Applies every design setting to all windows.</summary>

@@ -259,8 +259,13 @@ public partial class IslandWindow : Window
         return row;
     }
 
-    private void ApplyColor() =>
-        Island.Background = new SolidColorBrush(Settings.ToColor(Settings.Current.IslandColor, (byte)Math.Round(255 * Settings.Current.IslandOpacity), Color.FromRgb(0x06, 0x06, 0x08)));
+    private void ApplyColor()
+    {
+        Island.Background = Theme.Surface(Settings.Current.IslandColor, (byte)Math.Round(255 * Settings.Current.IslandOpacity));
+        var (rim, width) = Theme.Rim(subtle: false);
+        Island.BorderBrush = rim;
+        Island.BorderThickness = new Thickness(width);
+    }
 
     /// <summary>Color, size and rounding from the design settings. The scale is static, so the expand animation stays as cheap as before.</summary>
     public void ApplyLook()

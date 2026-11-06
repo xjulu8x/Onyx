@@ -16,6 +16,10 @@
         <!-- Dark, slightly see-through bar; rounded corners are anti-aliased by WPF since the window is per-pixel transparent. -->
         <!-- Even, soft rim; not pixel-snapped so the rounded corners stay smoothly anti-aliased -->
         <Border x:Name="Bg" CornerRadius="16" Background="#14000000" BorderThickness="1" BorderBrush="#1FFFFFFF" SnapsToDevicePixels="False"/>
+        <!-- Form "Drei Inseln": one surface per group, placed by UpdateShape -->
+        <Border x:Name="BgLeft" HorizontalAlignment="Left" Visibility="Collapsed"/>
+        <Border x:Name="BgMid" HorizontalAlignment="Left" Visibility="Collapsed"/>
+        <Border x:Name="BgRight" HorizontalAlignment="Left" Visibility="Collapsed"/>
 
         <!-- Left: now playing -->
         <Border x:Name="MediaChip" HorizontalAlignment="Left" Margin="10,6" CornerRadius="12" Background="#01000000"
@@ -62,7 +66,7 @@
         </StackPanel>
 
         <!-- Right: tray -->
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,10,0" Effect="{StaticResource TextShadow}">
+        <StackPanel x:Name="RightPanel" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,10,0" Effect="{StaticResource TextShadow}">
             <!-- Icons of background apps (Steam, Discord, ...); filled by RebuildTray -->
             <StackPanel x:Name="TrayPanel" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,2,0"/>
             <Button x:Name="NetBtn" Style="{StaticResource TrayButton}" Content="&#xE701;" Click="Network_Click" ToolTip="Netzwerk"/>

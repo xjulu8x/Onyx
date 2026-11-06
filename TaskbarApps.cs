@@ -259,6 +259,29 @@ public static class TaskbarApps
         return list;
     }
 
+    private static readonly Dictionary<(ImageSource, Color), ImageSource> Tints = new();
+
+    /// <summary>The icon in a single color: shape and shading stay, the hue goes. Results are kept, so this runs once per icon.</summary>
+    internal static ImageSource Tinted(ImageSource icon, Color color)
+    {
+        if (icon is not BitmapSource source) return icon;
+        if (Tints.TryGetValue((icon, color), out var known)) return known;
+        var bgra = new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+        int stride = bgra.PixelWidth * 4;
+        var px = new byte[stride * bgra.PixelHeight];
+        bgra.CopyPixels(px, stride, 0);
+        for (int i = 0; i < px.Length; i += 4)
+        {
+            double light = 0.55 + 0.45 * (0.114 * px[i] + 0.587 * px[i + 1] + 0.299 * px[i + 2]) / 255;
+            px[i] = (byte)(color.B * light);
+            px[i + 1] = (byte)(color.G * light);
+            px[i + 2] = (byte)(color.R * light);
+        }
+        var result = BitmapSource.Create(bgra.PixelWidth, bgra.PixelHeight, source.DpiX, source.DpiY, PixelFormats.Bgra32, null, px, stride);
+        result.Freeze();
+        return Tints[(icon, color)] = result;
+    }
+
     private static uint ProcessOf(IntPtr h)
     {
         Win32.GetWindowThreadProcessId(h, out var pid);

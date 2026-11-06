@@ -41,6 +41,7 @@ public partial class TaskbarWindow : Window
         Refresh();
         HookWindowEvents();
         StartFullscreenWatch();
+        foreach (var panel in new FrameworkElement[] { CenterPanel, RightPanel, MediaChip, Root }) panel.SizeChanged += (_, _) => UpdateShape();
         UpdateMedia();
     }
 
@@ -48,28 +49,100 @@ public partial class TaskbarWindow : Window
     {
         // Never fully transparent: at least 15 % of the bar's color stays, so icons remain readable.
         byte alpha = (byte)Math.Round(255 * Math.Clamp(1 - Settings.Current.Transparency, 0.15, 1));
-        Bg.Background = new SolidColorBrush(Settings.ToColor(Settings.Current.TaskbarColor, alpha, Color.FromRgb(0x06, 0x06, 0x08)));
-
         var s = Settings.Current;
-        Bg.CornerRadius = new CornerRadius(s.TaskbarRadius);
+        var surface = Theme.Surface(s.TaskbarColor, alpha);
+        var (rim, rimWidth) = Theme.Rim(subtle: true);
+        foreach (var b in new[] { Bg, BgLeft, BgMid, BgRight })
+        {
+            b.Background = surface;
+            b.BorderBrush = rim;
+            b.BorderThickness = new Thickness(rimWidth);
+            b.CornerRadius = new CornerRadius(s.TaskbarRadius);
+        }
         StartBtn.Height = s.TaskbarHeight - 6;
         foreach (var r in StartLogo.Children.OfType<System.Windows.Shapes.Rectangle>()) r.Fill = Theme.AccentBrush;
         foreach (var btn in _buttons.Values)
         {
             btn.Root.Height = s.TaskbarHeight - 6;
             btn.Icon.Width = btn.Icon.Height = s.TaskbarIconSize;
-            if (btn.Active) btn.Indicator.Background = Theme.AccentBrush;
+            ShowIcon(btn);
+            SetState(btn, btn.Active, btn.App.Windows.Count > 0);
         }
-        // Apps on the left: the music chip moves to the middle so they don't overlap.
-        CenterPanel.HorizontalAlignment = s.TaskbarAppsLeft ? HorizontalAlignment.Left : HorizontalAlignment.Center;
-        CenterPanel.Margin = new Thickness(s.TaskbarAppsLeft ? 6 : 0, 0, 0, 0);
-        MediaChip.HorizontalAlignment = s.TaskbarAppsLeft ? HorizontalAlignment.Center : HorizontalAlignment.Left;
+        DateText.Visibility = s.ClockStyle == 0 ? Visibility.Visible : Visibility.Collapsed;
+        TimeText.FontSize = s.ClockStyle == 2 ? 20 : 12;
+        TimeText.FontWeight = s.ClockStyle == 2 ? FontWeights.Light : FontWeights.Normal;
 
         if (Height != s.TaskbarHeight)
         {
             Height = s.TaskbarHeight;
             if (_hwnd != IntPtr.Zero) PositionAppBar();
         }
+        UpdateShape();
+    }
+
+    /// <summary>
+    /// Bar form: 0 = one bar across the screen, 1 = dock (only as wide as its content, centered),
+    /// 2 = three separate islands for music, apps and tray. The window stays full width; its transparent parts let clicks through.
+    /// </summary>
+    private void UpdateShape()
+    {
+        var s = Settings.Current;
+        bool islands = s.TaskbarShape == 2, dock = s.TaskbarShape == 1;
+        bool media = MediaChip.Visibility == Visibility.Visible;
+        Bg.Visibility = islands ? Visibility.Collapsed : Visibility.Visible;
+        BgLeft.Visibility = BgMid.Visibility = BgRight.Visibility = islands ? Visibility.Visible : Visibility.Collapsed;
+
+        if (dock)
+        {
+            const double gap = 10;
+            double music = media ? MediaChip.ActualWidth + gap : 0;
+            double total = gap + music + CenterPanel.ActualWidth + gap + RightPanel.ActualWidth + gap;
+            double x = Math.Max(0, (Root.ActualWidth - total) / 2);
+            Bg.HorizontalAlignment = MediaChip.HorizontalAlignment = CenterPanel.HorizontalAlignment = RightPanel.HorizontalAlignment = HorizontalAlignment.Left;
+            Bg.Width = total;
+            Bg.Margin = new Thickness(x, 0, 0, 0);
+            MediaChip.Margin = new Thickness(x + gap, 6, 0, 6);
+            CenterPanel.Margin = new Thickness(x + gap + music, 0, 0, 0);
+            RightPanel.Margin = new Thickness(x + gap + music + CenterPanel.ActualWidth + gap, 0, 0, 0);
+            return;
+        }
+
+        // Apps on the left: the music chip moves to the middle so they don't overlap.
+        Bg.HorizontalAlignment = HorizontalAlignment.Stretch;
+        Bg.Width = double.NaN;
+        Bg.Margin = new Thickness(0);
+        CenterPanel.HorizontalAlignment = s.TaskbarAppsLeft ? HorizontalAlignment.Left : HorizontalAlignment.Center;
+        CenterPanel.Margin = new Thickness(s.TaskbarAppsLeft ? 6 : 0, 0, 0, 0);
+        MediaChip.HorizontalAlignment = s.TaskbarAppsLeft ? HorizontalAlignment.Center : HorizontalAlignment.Left;
+        MediaChip.Margin = new Thickness(10, 6, 10, 6);
+        RightPanel.HorizontalAlignment = HorizontalAlignment.Right;
+        RightPanel.Margin = new Thickness(0, 0, 10, 0);
+
+        if (!islands) return;
+        // The panels may only just have moved, so measure after this layout pass.
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+        {
+            Wrap(BgLeft, MediaChip);
+            Wrap(BgMid, CenterPanel);
+            Wrap(BgRight, RightPanel);
+        });
+    }
+
+    private void Wrap(Border surface, FrameworkElement content)
+    {
+        if (content.Visibility != Visibility.Visible || content.ActualWidth <= 0) { surface.Visibility = Visibility.Collapsed; return; }
+        double x = content.TranslatePoint(new Point(0, 0), Root).X;
+        surface.Visibility = Visibility.Visible;
+        surface.Margin = new Thickness(Math.Max(0, x - 6), 0, 0, 0);
+        surface.Width = content.ActualWidth + 12;
+    }
+
+    /// <summary>Single-color symbols on request; the active app keeps its real colors, so it stands out.</summary>
+    private static void ShowIcon(AppButton btn)
+    {
+        var tint = Settings.Current.IconTint;
+        var color = tint switch { 1 => Colors.White, 2 => Color.FromRgb(0xB9, 0xBC, 0xC4), _ => Theme.Accent };
+        btn.Icon.Source = tint == 0 || btn.Active || btn.App.Icon == null ? btn.App.Icon : TaskbarApps.Tinted(btn.App.Icon, color);
     }
 
     // ---------- notification area ----------
@@ -413,12 +486,18 @@ public partial class TaskbarWindow : Window
 
     private void SetState(AppButton btn, bool active, bool running)
     {
-        double width = !running ? 0 : active ? 16 : 6;
+        // Indicator style: 0 line, 1 dot, 2 glowing line, 3 none
+        int style = Settings.Current.IndicatorStyle;
+        double width = !running || style == 3 ? 0 : style == 1 ? 5 : active ? 16 : 6;
         if (btn.Indicator.Width != width || btn.Active != active)
             btn.Indicator.BeginAnimation(WidthProperty, new DoubleAnimation(width, Theme.Ms(220)) { EasingFunction = Smooth });
+        btn.Indicator.Height = style == 1 ? 5 : 3;
+        btn.Indicator.CornerRadius = new CornerRadius(style == 1 ? 2.5 : 1.5);
         btn.Indicator.Background = active ? Theme.AccentBrush : IdleDot;
+        btn.Indicator.Effect = style == 2 && active ? new System.Windows.Media.Effects.DropShadowEffect { Color = Theme.Accent, BlurRadius = 10, ShadowDepth = 0 } : null;
         if (btn.Active == active) return;
         btn.Active = active;
+        ShowIcon(btn);
         btn.Root.Tag = active;
         if (!btn.Root.IsMouseOver) btn.Root.Background = active ? HoverBrush : NoBrush;
     }
@@ -565,6 +644,7 @@ public partial class TaskbarWindow : Window
     private void UpdateMedia()
     {
         MediaChip.Visibility = _media.HasSession ? Visibility.Visible : Visibility.Collapsed;
+        UpdateShape();
         TitleText.Text = _media.Title;
         ArtistText.Text = _media.Artist;
         PlayBtn.Content = _media.IsPlaying ? "" : "";

@@ -247,40 +247,62 @@ public partial class FlyoutWindow : Window
             Host.Content = BuildDesign(); // the switches and values shown here changed too
         }));
 
-        root.Children.Add(SectionTitle("Akzentfarbe"));
-        root.Children.Add(Choice(new[] { "Blau", "Hellblau", "Grau", "Weiß" }, Array.IndexOf(Theme.AccentColors, s.AccentColor), i =>
+        void Pick(string title, string[] options, int selected, Action<int> apply, StackPanel into)
         {
-            s.AccentColor = Theme.AccentColors[i];
-            s.Save();
-            bar.ApplyLook();
-        }));
+            into.Children.Add(SectionTitle(title));
+            into.Children.Add(Choice(options, selected, i => { apply(i); s.Save(); }));
+        }
 
-        root.Children.Add(SectionTitle("Schrift"));
-        root.Children.Add(Choice(Theme.Fonts.Select(f => f.Label).ToArray(), Array.FindIndex(Theme.Fonts, f => f.Family == s.FontFamily), i =>
-        {
-            s.FontFamily = Theme.Fonts[i].Family;
-            s.Save();
-            Theme.ApplyFont();
-        }));
+        var general = Group(root, "Allgemein");
+        Pick("Akzentfarbe", new[] { "Blau", "Hellblau", "Grau", "Weiß" }, Array.IndexOf(Theme.AccentColors, s.AccentColor), i => { s.AccentColor = Theme.AccentColors[i]; Theme.ApplyAll(); }, general);
+        Pick("Schrift", Theme.Fonts.Select(f => f.Label).ToArray(), Array.FindIndex(Theme.Fonts, f => f.Family == s.FontFamily), i => { s.FontFamily = Theme.Fonts[i].Family; Theme.ApplyFont(); }, general);
+        Pick("Animationen", new[] { "Schnell", "Normal", "Aus" }, s.AnimationSpeed, i => s.AnimationSpeed = i, general);
+        Pick("Rand", new[] { "Keiner", "Dezent", "Akzent", "Lichtlauf" }, s.RimStyle, i => { s.RimStyle = i; Theme.ApplyAll(); }, general);
+        Pick("Oberfläche", new[] { "Glatt", "Glas-Körnung" }, s.Grain ? 1 : 0, i => { s.Grain = i == 1; Theme.ApplyAll(); }, general);
 
-        root.Children.Add(SectionTitle("Animationen"));
-        root.Children.Add(Choice(new[] { "Schnell", "Normal", "Aus" }, s.AnimationSpeed, i => { s.AnimationSpeed = i; s.Save(); }));
+        var taskbar = Group(root, "Taskleiste");
+        Pick("Form", new[] { "Leiste", "Dock", "Drei Inseln" }, s.TaskbarShape, i => { s.TaskbarShape = i; bar.ApplyLook(); }, taskbar);
+        Pick("App-Symbole", new[] { "Farbig", "Weiß", "Grau", "Akzent" }, s.IconTint, i => { s.IconTint = i; bar.ApplyLook(); }, taskbar);
+        Pick("App-Anzeige", new[] { "Strich", "Punkt", "Leuchten", "Aus" }, s.IndicatorStyle, i => { s.IndicatorStyle = i; bar.ApplyLook(); }, taskbar);
+        Pick("Uhr", new[] { "Mit Datum", "Nur Zeit", "Groß" }, s.ClockStyle, i => { s.ClockStyle = i; bar.ApplyLook(); }, taskbar);
+        Pick("Apps", new[] { "Mittig", "Links" }, s.TaskbarAppsLeft ? 1 : 0, i => { s.TaskbarAppsLeft = i == 1; bar.ApplyLook(); }, taskbar);
+        taskbar.Children.Add(SectionTitle("Größe"));
+        taskbar.Children.Add(DesignSlider("Höhe", 38, 64, () => s.TaskbarHeight, v => { s.TaskbarHeight = Math.Round(v); bar.ApplyLook(); }, v => $"{v:0} px"));
+        taskbar.Children.Add(DesignSlider("Symbolgröße", 18, 32, () => s.TaskbarIconSize, v => { s.TaskbarIconSize = Math.Round(v); bar.ApplyLook(); }, v => $"{v:0} px"));
+        taskbar.Children.Add(DesignSlider("Ecken", 0, 25, () => s.TaskbarRadius, v => { s.TaskbarRadius = Math.Round(v); bar.ApplyLook(); }, v => $"{v:0} px"));
 
-        root.Children.Add(SectionTitle("Taskleiste"));
-        root.Children.Add(DesignSlider("Höhe", 38, 64, () => s.TaskbarHeight, v => { s.TaskbarHeight = Math.Round(v); bar.ApplyLook(); }, v => $"{v:0} px"));
-        root.Children.Add(DesignSlider("Symbolgröße", 18, 32, () => s.TaskbarIconSize, v => { s.TaskbarIconSize = Math.Round(v); bar.ApplyLook(); }, v => $"{v:0} px"));
-        root.Children.Add(DesignSlider("Ecken", 0, 25, () => s.TaskbarRadius, v => { s.TaskbarRadius = Math.Round(v); bar.ApplyLook(); }, v => $"{v:0} px"));
-        root.Children.Add(Choice(new[] { "Apps mittig", "Apps links" }, s.TaskbarAppsLeft ? 1 : 0, i => { s.TaskbarAppsLeft = i == 1; s.Save(); bar.ApplyLook(); }));
+        var island = Group(root, "Island");
+        island.Children.Add(DesignSlider("Größe", 0.8, 1.2, () => s.IslandScale, v => { s.IslandScale = Math.Round(v, 2); app.Island.ApplyLook(); }, v => $"{v * 100:0} %"));
+        island.Children.Add(DesignSlider("Ecken", 0.2, 1, () => s.IslandCorners, v => { s.IslandCorners = Math.Round(v, 2); app.Island.ApplyLook(); }, v => $"{v * 100:0} %"));
+        island.Children.Add(DesignSlider("Deckkraft", 0.4, 1, () => s.IslandOpacity, v => { s.IslandOpacity = Math.Round(v, 2); app.Island.ApplyLook(); }, v => $"{v * 100:0} %"));
 
-        root.Children.Add(SectionTitle("Island"));
-        root.Children.Add(DesignSlider("Größe", 0.8, 1.2, () => s.IslandScale, v => { s.IslandScale = Math.Round(v, 2); app.Island.ApplyLook(); }, v => $"{v * 100:0} %"));
-        root.Children.Add(DesignSlider("Ecken", 0.2, 1, () => s.IslandCorners, v => { s.IslandCorners = Math.Round(v, 2); app.Island.ApplyLook(); }, v => $"{v * 100:0} %"));
-        root.Children.Add(DesignSlider("Deckkraft", 0.4, 1, () => s.IslandOpacity, v => { s.IslandOpacity = Math.Round(v, 2); app.Island.ApplyLook(); }, v => $"{v * 100:0} %"));
-
-        root.Children.Add(SectionTitle("Widgets"));
-        root.Children.Add(DesignSlider("Größe", 0.7, 1.3, () => s.WidgetScale, v => { s.WidgetScale = Math.Round(v, 2); app.ApplyWidgetLook(); }, v => $"{v * 100:0} %"));
-        root.Children.Add(DesignSlider("Deckkraft", 0.3, 1, () => s.WidgetOpacity, v => { s.WidgetOpacity = Math.Round(v, 2); app.ApplyWidgetLook(); }, v => $"{v * 100:0} %"));
+        var widgets = Group(root, "Widgets");
+        widgets.Children.Add(DesignSlider("Größe", 0.7, 1.3, () => s.WidgetScale, v => { s.WidgetScale = Math.Round(v, 2); app.ApplyWidgetLook(); }, v => $"{v * 100:0} %"));
+        widgets.Children.Add(DesignSlider("Deckkraft", 0.3, 1, () => s.WidgetOpacity, v => { s.WidgetOpacity = Math.Round(v, 2); app.ApplyWidgetLook(); }, v => $"{v * 100:0} %"));
         return root;
+    }
+
+    private static readonly HashSet<string> OpenGroups = new() { "Allgemein" };
+
+    /// <summary>Foldable section, so the page stays short. Returns the panel for its content.</summary>
+    private StackPanel Group(StackPanel parent, string title)
+    {
+        var body = new StackPanel { Margin = new Thickness(0, 0, 0, 6), Visibility = OpenGroups.Contains(title) ? Visibility.Visible : Visibility.Collapsed };
+        var head = new Grid { Background = Brushes.Transparent, Cursor = Cursors.Hand, Margin = new Thickness(2, 12, 2, 4) };
+        head.Children.Add(new TextBlock { Text = title, FontSize = 13, FontWeight = FontWeights.SemiBold });
+        var arrow = Glyph(OpenGroups.Contains(title) ? "" : "", 11);
+        arrow.HorizontalAlignment = HorizontalAlignment.Right;
+        head.Children.Add(arrow);
+        head.MouseLeftButtonUp += (_, _) =>
+        {
+            bool open = body.Visibility != Visibility.Visible;
+            body.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+            arrow.Text = open ? "" : "";
+            if (open) OpenGroups.Add(title); else OpenGroups.Remove(title);
+        };
+        parent.Children.Add(head);
+        parent.Children.Add(body);
+        return body;
     }
 
     // ---------- tray overflow ----------

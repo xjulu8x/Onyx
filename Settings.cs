@@ -34,6 +34,12 @@ public class Settings
     public double IslandOpacity { get; set; } = 0.97;
     public double WidgetScale { get; set; } = 1;
     public double WidgetOpacity { get; set; } = 1;
+    public int TaskbarShape { get; set; } // 0 bar, 1 dock, 2 three islands
+    public int IconTint { get; set; } // 0 real colors, 1 white, 2 grey, 3 accent
+    public int IndicatorStyle { get; set; } // 0 line, 1 dot, 2 glow, 3 none
+    public int RimStyle { get; set; } = 1; // 0 none, 1 subtle, 2 accent, 3 light run
+    public int ClockStyle { get; set; } // 0 time and date, 1 time, 2 large
+    public bool Grain { get; set; }
 
     /// <summary>Parses a "#RRGGBB" setting; falls back to the given color when the value is broken.</summary>
     public static System.Windows.Media.Color ToColor(string hex, byte alpha, System.Windows.Media.Color fallback)

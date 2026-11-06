@@ -13,7 +13,7 @@
     <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <SatelliteResourceLanguages>de;en</SatelliteResourceLanguages>
-    <Version>1.3.0</Version>
+    <Version>1.3.1</Version>
     <Product>Onyx</Product>
     <AssemblyTitle>Onyx</AssemblyTitle>
     <Company>Onyx</Company>
