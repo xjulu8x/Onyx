@@ -118,6 +118,8 @@
                     <!-- Settings page (gear button); built in code -->
                     <Grid x:Name="SettingsView" Margin="18,10,18,10" Visibility="Collapsed" Opacity="0"/>
                 </Grid>
+                <!-- Music glow: only its opacity changes -->
+                <Border x:Name="GlowBar" Height="18" VerticalAlignment="Bottom" Opacity="0" IsHitTestVisible="False"/>
             </Grid>
         </Border>
         <Path x:Name="EarRight" Width="16" Height="16" VerticalAlignment="Top" Data="M16,0 L0,0 L0,16 Q0,0 16,0 Z" Visibility="Collapsed"/>

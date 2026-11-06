@@ -145,6 +145,16 @@ public partial class TaskbarWindow : Window
         btn.Icon.Source = tint == 0 || btn.Active || btn.App.Icon == null ? btn.App.Icon : TaskbarApps.Tinted(btn.App.Icon, color);
     }
 
+    /// <summary>Tells the profile logic which program is in front. Onyx's own windows don't count as a change.</summary>
+    private void CheckProfile()
+    {
+        if (Settings.Current.Profiles.Count == 0) { Theme.CheckProfile(null); return; }
+        var fg = Win32.GetForegroundWindow();
+        if (fg == IntPtr.Zero || IsOwnWindow(fg)) return;
+        Win32.GetWindowThreadProcessId(fg, out var pid);
+        Theme.CheckProfile(TaskbarApps.PathOf(pid));
+    }
+
     // ---------- notification area ----------
 
     private const int MaxTrayIcons = 8; // more go behind the arrow, so the bar stays tidy
@@ -457,6 +467,7 @@ public partial class TaskbarWindow : Window
         TimeText.Text = DateTime.Now.ToString("HH:mm");
         DateText.Text = DateTime.Now.ToString("dd.MM.yyyy", CultureInfo.GetCultureInfo("de-DE"));
         UpdateVolumeIcon();
+        CheckProfile();
         if (_tick++ % 6 == 0) UpdateNetworkIcon();
         RefreshApps();
     }

@@ -126,10 +126,39 @@ internal interface IAudioEndpointVolume
     [PreserveSig] int GetMute([MarshalAs(UnmanagedType.Bool)] out bool mute);
 }
 
+[ComImport, Guid("C02216F6-8C67-4B5B-9D00-D008E73E0064"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IAudioMeterInformation
+{
+    [PreserveSig] int GetPeakValue(out float peak);
+}
+
 internal static class Volume
 {
     private static IAudioEndpointVolume _cached;
     private static DateTime _cachedAt;
+    private static IAudioMeterInformation _meter;
+    private static DateTime _meterAt;
+
+    /// <summary>Current output level, 0..1. Windows measures this anyway, so reading it is nearly free.</summary>
+    public static float Peak()
+    {
+        try
+        {
+            if (_meter == null || (DateTime.UtcNow - _meterAt).TotalSeconds > 5)
+            {
+                _meterAt = DateTime.UtcNow;
+                var en = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom();
+                if (en.GetDefaultAudioEndpoint(0, 1, out var dev) != 0) return 0;
+                var iid = typeof(IAudioMeterInformation).GUID;
+                dev.Activate(ref iid, 23, IntPtr.Zero, out var o);
+                _meter = o as IAudioMeterInformation;
+            }
+            float peak = 0;
+            _meter?.GetPeakValue(out peak);
+            return peak;
+        }
+        catch { return 0; }
+    }
 
     // Re-resolved every few seconds (cheap enough, and follows a changed default output device) instead of on every call.
     private static IAudioEndpointVolume Endpoint()

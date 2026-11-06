@@ -96,7 +96,19 @@ Die Positionen bleiben auch nach einem Neustart gespeichert.
 Island → Zahnrad → unten **Island / Leiste / Widgets** wählen und eine Farbe anklicken.
 
 ### Design
-Island → Zahnrad → **„Design“**: Themes per Klick, Akzentfarbe, Schrift, Animationstempo sowie Größe, Ecken und Deckkraft von Taskleiste, Island und Widgets. Alles wirkt sofort.
+Island → Zahnrad → **„Design“**. Alles wirkt sofort:
+
+- **Allgemein:** Themes, Akzentfarbe, Schrift, Animationstempo, Rand (auch als Lichtlauf), Glas-Körnung
+- **Taskleiste:** Form (Leiste, Dock, Drei Inseln), einfarbige App-Symbole, App-Anzeige, Uhr-Stil, Größen
+- **Island:** Form (schwebend, angedockt, Kapsel), Bewegung, Größe, Ecken, Deckkraft
+- **Widgets:** Linie, Balken oder Ringe, als Block oder einzeln platzierbar
+- **Tageszeit:** Themes wechseln automatisch um 7 und 19 Uhr
+- **Eigene Themes:** speichern und als `.onyxtheme`-Datei teilen
+
+### Effekte
+- **Musik-Glow:** Die Island leuchtet im Takt der Musik, wahlweise in der Farbe des Covers.
+- **Hitze-Alarm:** Die Island wird rot, wenn CPU oder GPU die eingestellte Temperatur erreichen.
+- **Profile:** Eine App bekommt ihr eigenes Theme, das nur gilt, solange sie im Vordergrund ist.
 
 ---
 

@@ -51,6 +51,12 @@ public class Settings
     public string NightTheme { get; set; } = "Onyx";
     public Dictionary<string, Dictionary<string, JsonElement>> CustomThemes { get; set; } = new();
 
+    // Effects
+    public int MusicGlow { get; set; } // 0 off, 1 accent color, 2 color of the cover
+    public bool HeatAlarm { get; set; } = true;
+    public double HeatLimit { get; set; } = 90;
+    public Dictionary<string, string> Profiles { get; set; } = new(StringComparer.OrdinalIgnoreCase); // program file -> theme
+
     /// <summary>Parses a "#RRGGBB" setting; falls back to the given color when the value is broken.</summary>
     public static System.Windows.Media.Color ToColor(string hex, byte alpha, System.Windows.Media.Color fallback)
     {
@@ -81,7 +87,9 @@ public class Settings
     }
 
     /// <summary>Writes to a temp file first and swaps it in, so a crash or power loss never leaves a half-written file.</summary>
-    public void Save()
+    public void Save() => Theme.RestoreForSave(Write);
+
+    private void Write()
     {
         lock (SaveLock)
         {

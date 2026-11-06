@@ -293,7 +293,62 @@ public partial class FlyoutWindow : Window
         Pick("In der Nacht", names, Array.IndexOf(names, s.NightTheme), i => { s.NightTheme = names[i]; Theme.CheckTimeOfDay(force: true); }, time);
 
         BuildOwnThemes(Group(root, "Eigene Themes"));
+
+        var effects = Group(root, "Effekte");
+        Pick("Musik-Glow", new[] { "Aus", "Akzentfarbe", "Cover-Farbe" }, s.MusicGlow, i => { s.MusicGlow = i; app.Island.ApplyGlow(); }, effects);
+        Pick("Hitze-Alarm", new[] { "Aus", "An" }, s.HeatAlarm ? 1 : 0, i => s.HeatAlarm = i == 1, effects);
+        effects.Children.Add(DesignSlider("Warnen ab", 70, 100, () => s.HeatLimit, v => s.HeatLimit = Math.Round(v), v => $"{v:0} °C"));
+
+        BuildProfiles(Group(root, "Profile"));
         return root;
+    }
+
+    /// <summary>Per-app themes: while such an app is in front, its theme is shown.</summary>
+    private void BuildProfiles(StackPanel into)
+    {
+        var s = Settings.Current;
+        void Reload() => Host.Content = BuildDesign();
+        into.Children.Add(new TextBlock { Text = "Solange eine dieser Apps im Vordergrund ist, gilt ihr Theme.", FontSize = 11, Foreground = Dim, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(2, 0, 0, 8) });
+
+        foreach (var (program, theme) in s.Profiles.ToList())
+        {
+            var row = new Grid { Margin = new Thickness(2, 0, 0, 4) };
+            row.ColumnDefinitions.Add(new ColumnDefinition());
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.Children.Add(new TextBlock { Text = System.IO.Path.GetFileNameWithoutExtension(program), FontSize = 12, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
+            // A click moves on to the next theme.
+            var pick = new Button { Style = (Style)FindResource("IconButton"), Background = new SolidColorBrush(Color.FromArgb(0x1A, 255, 255, 255)), Padding = new Thickness(10, 5, 10, 5), Content = new TextBlock { Text = theme, FontFamily = (FontFamily)FindResource("Ui"), FontSize = 11 }, ToolTip = "Theme wechseln" };
+            pick.Click += (_, _) =>
+            {
+                var names = Theme.Names();
+                s.Profiles[program] = names[(names.IndexOf(s.Profiles[program]) + 1) % names.Count];
+                s.Save();
+                Reload();
+            };
+            Grid.SetColumn(pick, 1);
+            row.Children.Add(pick);
+            var delete = new Button { Style = (Style)FindResource("IconButton"), Content = "", FontSize = 12, Margin = new Thickness(4, 0, 0, 0), ToolTip = "Entfernen" };
+            delete.Click += (_, _) => { s.Profiles.Remove(program); s.Save(); Reload(); };
+            Grid.SetColumn(delete, 2);
+            row.Children.Add(delete);
+            into.Children.Add(row);
+        }
+
+        var add = new Button { Style = (Style)FindResource("Row"), Margin = new Thickness(0, 4, 0, 0), Content = new TextBlock { Text = "Laufende App hinzufügen", FontSize = 12 } };
+        add.Click += async (_, _) =>
+        {
+            var apps = (await Task.Run(CollectRunningApps)).Where(a => a.HasWindow).OrderBy(a => a.Name).ToList();
+            var menu = new ContextMenu { PlacementTarget = add, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+            foreach (var running in apps)
+            {
+                var item = new MenuItem { Header = running.Name };
+                item.Click += (_, _) => { s.Profiles[System.IO.Path.GetFileName(running.Path)] = Theme.Names()[0]; s.Save(); Reload(); };
+                menu.Items.Add(item);
+            }
+            menu.IsOpen = menu.Items.Count > 0;
+        };
+        into.Children.Add(add);
     }
 
     private void BuildOwnThemes(StackPanel into)

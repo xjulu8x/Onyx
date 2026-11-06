@@ -55,6 +55,7 @@ public partial class IslandWindow : Window
         fast.Start();
 
         UpdateService.Changed += () => Dispatcher.BeginInvoke(ShowUpdateState);
+        _glowTimer.Tick += (_, _) => GlowTick();
         ApplyLook();
         if (Settings.Current.AlwaysExpanded) SetExpanded(true, animate: false);
         UpdateMedia();
@@ -263,7 +264,8 @@ public partial class IslandWindow : Window
 
     private void ApplyColor()
     {
-        Island.Background = Theme.Surface(Settings.Current.IslandColor, (byte)Math.Round(255 * Settings.Current.IslandOpacity));
+        Island.Background = Theme.Surface(_heatText != null ? "#5A1010" : Settings.Current.IslandColor, (byte)Math.Round(255 * Settings.Current.IslandOpacity));
+        EarLeft.Fill = EarRight.Fill = Island.Background;
         var (rim, width) = Theme.Rim(subtle: false);
         Island.BorderBrush = rim;
         Island.BorderThickness = new Thickness(width);
@@ -298,6 +300,7 @@ public partial class IslandWindow : Window
         Left = (SystemParameters.PrimaryScreenWidth - Width) / 2;
         BeginAnimation(RadiusProperty, null);
         Radius = (_expanded ? 28 : CompactRadius) * s.IslandCorners;
+        ApplyGlow();
     }
 
     private Button _updatePill;
@@ -346,14 +349,61 @@ public partial class IslandWindow : Window
         bool has = _media.HasSession;
         TitleText.Text = has ? _media.Title : "Nichts wird abgespielt";
         Artist.Text = has ? _media.Artist : "";
-        CompactTitle.Text = has ? _media.Title : DateTime.Now.ToString("HH:mm");
+        CompactTitle.Text = _heatText ?? (has ? _media.Title : DateTime.Now.ToString("HH:mm"));
         PlayBtn.Content = _media.IsPlaying ? "" : "";
 
         var art = has ? _media.Art : null;
         Art.Background = art != null ? new ImageBrush(art) { Stretch = Stretch.UniformToFill } : new SolidColorBrush(Color.FromArgb(0x1F, 255, 255, 255));
         CompactArt.Background = art != null ? new ImageBrush(art) { Stretch = Stretch.UniformToFill } : new SolidColorBrush(Color.FromArgb(0x22, 255, 255, 255));
         ArtIcon.Visibility = CompactArtIcon.Visibility = art == null ? Visibility.Visible : Visibility.Collapsed;
+        if (!ReferenceEquals(art, _glowArt)) { _glowArt = art; ApplyGlow(); }
         UpdateProgress();
+    }
+
+    // ---------- music glow ----------
+
+    private readonly DispatcherTimer _glowTimer = new() { Interval = TimeSpan.FromMilliseconds(50) };
+    private object _glowArt;
+    private double _glowLevel;
+
+    /// <summary>
+    /// A soft light at the lower edge that follows the real audio level. Only the opacity of this one small element changes,
+    /// at 20 frames per second: animating more of the transparent window is what made the island stutter before.
+    /// </summary>
+    public void ApplyGlow()
+    {
+        int mode = Settings.Current.MusicGlow;
+        var color = mode == 2 && _media.Art is System.Windows.Media.Imaging.BitmapSource art ? Theme.CoverColor(art) : Theme.Accent;
+        GlowBar.Background = new LinearGradientBrush(Color.FromArgb(0, color.R, color.G, color.B), color, 90);
+        if (mode == 0) { _glowTimer.Stop(); GlowBar.Opacity = 0; }
+        else _glowTimer.Start();
+    }
+
+    private void GlowTick()
+    {
+        // Falls off gently, so it pulses with the beat instead of flickering.
+        double peak = IsVisible && _media.IsPlaying ? Volume.Peak() : 0;
+        _glowLevel = Math.Max(peak, _glowLevel * 0.82);
+        double opacity = Math.Round(Math.Min(0.9, _glowLevel * 1.3), 2);
+        if (opacity != GlowBar.Opacity) GlowBar.Opacity = opacity;
+    }
+
+    // ---------- heat alarm ----------
+
+    private string _heatText;
+
+    /// <summary>Above the limit the island turns red and names the hot part. It calms down 3 degrees below, so it doesn't flicker.</summary>
+    private void CheckHeat()
+    {
+        var s = Settings.Current;
+        double cpu = _sys.CpuTemp ?? 0, gpu = _sys.GpuTemp ?? 0, hottest = Math.Max(cpu, gpu);
+        bool hot = s.HeatAlarm && hottest >= (_heatText != null ? s.HeatLimit - 3 : s.HeatLimit);
+        string text = hot ? $"{(cpu >= gpu ? "CPU" : "GPU")} {hottest:0}° – zu heiß" : null;
+        if (text == _heatText) return;
+        bool changed = (text == null) != (_heatText == null);
+        _heatText = text;
+        if (changed) ApplyColor();
+        UpdateMedia();
     }
 
     private void UpdateProgress()
@@ -373,6 +423,7 @@ public partial class IslandWindow : Window
         RamBar.Value = _sys.RamTotalGB > 0 ? _sys.RamUsedGB / _sys.RamTotalGB : 0;
         DownText.Text = SystemMonitor.Rate(_sys.DownBps);
         UpText.Text = SystemMonitor.Rate(_sys.UpBps);
+        CheckHeat();
     }
 
     private void FastTick()
@@ -382,7 +433,7 @@ public partial class IslandWindow : Window
         bool idle = !_expanded && !_media.IsPlaying;
         if (!idle || _tick % 4 == 0) UpdateProgress();
         if (_media.IsPlaying || _tick % 4 == 0) AnimateEq();
-        if (!_media.HasSession) CompactTitle.Text = DateTime.Now.ToString("HH:mm");
+        if (!_media.HasSession && _heatText == null) CompactTitle.Text = DateTime.Now.ToString("HH:mm");
         if (_tick % 8 == 0) Native.BringTopmost(this);
     }
 

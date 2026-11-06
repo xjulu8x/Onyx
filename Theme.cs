@@ -156,10 +156,7 @@ internal static class Theme
 
     public static void SaveCurrent(string name)
     {
-        var values = new Dictionary<string, JsonElement>();
-        foreach (var key in DesignKeys.Keys)
-            values[key] = JsonSerializer.SerializeToElement(typeof(Settings).GetProperty(key)!.GetValue(Settings.Current));
-        Settings.Current.CustomThemes[name] = values;
+        Settings.Current.CustomThemes[name] = Capture();
         Settings.Current.Save();
     }
 
@@ -198,6 +195,71 @@ internal static class Theme
             return name;
         }
         catch { return null; }
+    }
+
+    // ---------- profiles ----------
+
+    private static string _profile;
+    private static Dictionary<string, JsonElement> _beforeProfile;
+
+    /// <summary>
+    /// Called with the program in the foreground: its theme is applied while it is in front, then the previous design
+    /// returns. Profile themes are never saved, so a crash can't leave one behind as the normal design.
+    /// </summary>
+    public static void CheckProfile(string exePath)
+    {
+        var s = Settings.Current;
+        var program = exePath == null ? null : Path.GetFileName(exePath);
+        var theme = program != null && s.Profiles.TryGetValue(program, out var t) ? t : null;
+        if (theme == _profile) return;
+
+        if (_beforeProfile != null && theme == null)
+        {
+            Load(_beforeProfile);
+            _beforeProfile = null;
+        }
+        else if (theme != null)
+        {
+            _beforeProfile ??= Capture();
+            int preset = Array.FindIndex(Presets, p => p.Name == theme);
+            if (preset >= 0)
+            {
+                var p = Presets[preset];
+                (s.IslandColor, s.TaskbarColor, s.WidgetColor, s.AccentColor, s.TaskbarTransparency) = (p.Island, p.Taskbar, p.Widgets, p.Accent, p.Transparency);
+            }
+            else if (s.CustomThemes.TryGetValue(theme, out var values)) Load(values);
+        }
+        _profile = theme;
+        ApplyAll();
+    }
+
+    /// <summary>The design to write to disk: while a profile is active that is the one from before it.</summary>
+    public static void RestoreForSave(Action save)
+    {
+        if (_beforeProfile == null) { save(); return; }
+        var current = Capture();
+        Load(_beforeProfile);
+        save();
+        Load(current);
+    }
+
+    private static Dictionary<string, JsonElement> Capture() =>
+        DesignKeys.Keys.ToDictionary(key => key, key => JsonSerializer.SerializeToElement(typeof(Settings).GetProperty(key)!.GetValue(Settings.Current)));
+
+    /// <summary>A bright enough average color of the cover, for the music glow.</summary>
+    public static Color CoverColor(System.Windows.Media.Imaging.BitmapSource art)
+    {
+        var small = new System.Windows.Media.Imaging.TransformedBitmap(art, new ScaleTransform(16.0 / art.PixelWidth, 16.0 / art.PixelHeight));
+        var bgra = new System.Windows.Media.Imaging.FormatConvertedBitmap(small, PixelFormats.Bgra32, null, 0);
+        int stride = bgra.PixelWidth * 4;
+        var px = new byte[stride * bgra.PixelHeight];
+        bgra.CopyPixels(px, stride, 0);
+        double b = 0, g = 0, r = 0;
+        int n = px.Length / 4;
+        for (int i = 0; i < px.Length; i += 4) { b += px[i]; g += px[i + 1]; r += px[i + 2]; }
+        b /= n; g /= n; r /= n;
+        double lift = 200 / Math.Max(1, Math.Max(r, Math.Max(g, b)));
+        return Color.FromRgb((byte)Math.Min(255, r * lift), (byte)Math.Min(255, g * lift), (byte)Math.Min(255, b * lift));
     }
 
     // ---------- time of day ----------
