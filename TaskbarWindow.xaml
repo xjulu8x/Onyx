@@ -16,34 +16,9 @@
         <!-- Dark, slightly see-through bar; rounded corners are anti-aliased by WPF since the window is per-pixel transparent. -->
         <!-- Even, soft rim; not pixel-snapped so the rounded corners stay smoothly anti-aliased -->
         <Border x:Name="Bg" CornerRadius="16" Background="#14000000" BorderThickness="1" BorderBrush="#1FFFFFFF" SnapsToDevicePixels="False"/>
-        <!-- Form "Drei Inseln": one surface per group, placed by UpdateShape -->
-        <Border x:Name="BgLeft" HorizontalAlignment="Left" Visibility="Collapsed"/>
+        <!-- Form "Inseln": one surface per group, placed by UpdateShape -->
         <Border x:Name="BgMid" HorizontalAlignment="Left" Visibility="Collapsed"/>
         <Border x:Name="BgRight" HorizontalAlignment="Left" Visibility="Collapsed"/>
-
-        <!-- Left: now playing -->
-        <Border x:Name="MediaChip" HorizontalAlignment="Left" Margin="10,6" CornerRadius="12" Background="#01000000"
-                MouseEnter="Media_MouseEnter" MouseLeave="Media_MouseLeave" MaxWidth="320" Visibility="Collapsed">
-            <Grid Margin="6,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <Border x:Name="Art" Width="30" Height="30" CornerRadius="6" Background="#22FFFFFF" Cursor="Hand" MouseLeftButtonUp="Art_Click">
-                    <TextBlock x:Name="ArtIcon" Text="&#xE8D6;" FontFamily="{StaticResource Icons}" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                </Border>
-                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,6,0" Effect="{StaticResource TextShadow}">
-                    <TextBlock x:Name="TitleText" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                    <TextBlock x:Name="ArtistText" FontSize="10" Foreground="{StaticResource Dim}" TextTrimming="CharacterEllipsis"/>
-                </StackPanel>
-                <StackPanel x:Name="MediaControls" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Opacity="0">
-                    <Button Style="{StaticResource IconButton}" Content="&#xE892;" FontSize="11" Click="Prev_Click"/>
-                    <Button x:Name="PlayBtn" Style="{StaticResource IconButton}" Content="&#xE768;" FontSize="12" Click="Play_Click"/>
-                    <Button Style="{StaticResource IconButton}" Content="&#xE893;" FontSize="11" Click="Next_Click"/>
-                </StackPanel>
-            </Grid>
-        </Border>
 
         <!-- Center: start + apps -->
         <StackPanel x:Name="CenterPanel" Orientation="Horizontal" HorizontalAlignment="Center">
@@ -67,24 +42,15 @@
 
         <!-- Right: tray -->
         <StackPanel x:Name="RightPanel" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,10,0" Effect="{StaticResource TextShadow}">
-            <!-- Icons of background apps (Steam, Discord, ...); filled by RebuildTray -->
-            <StackPanel x:Name="TrayPanel" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,2,0"/>
+            <!-- Opens the window with the icons of background apps, like the arrow in Windows -->
+            <Button x:Name="TrayBtn" Style="{StaticResource TrayButton}" Content="&#xE70E;" FontSize="11" Click="Tray_Click" ToolTip="Ausgeblendete Symbole" Visibility="Collapsed"/>
             <Button x:Name="NetBtn" Style="{StaticResource TrayButton}" Content="&#xE701;" Click="Network_Click" ToolTip="Netzwerk"/>
             <Button x:Name="VolBtn" Style="{StaticResource TrayButton}" Content="&#xE767;" Click="Volume_Click"
                     MouseWheel="Vol_Wheel" ToolTip="Lautst&#xE4;rke (Mausrad)"/>
-            <Button Style="{StaticResource TrayButton}" Click="Center_Click" Padding="10,4" ToolTip="Kalender">
+            <Button Style="{StaticResource TrayButton}" Click="Center_Click" Padding="10,4" ToolTip="Aktivit&#xE4;tszentrum">
                 <StackPanel>
                     <TextBlock x:Name="TimeText" FontFamily="{DynamicResource Ui}" FontSize="12" HorizontalAlignment="Right"/>
                     <TextBlock x:Name="DateText" FontFamily="{DynamicResource Ui}" FontSize="11" HorizontalAlignment="Right" Foreground="{StaticResource Dim}"/>
-                </StackPanel>
-            </Button>
-            <!-- Action center: a labelled pill at the far right so it is easy to find -->
-            <Button Style="{StaticResource TrayButton}" Click="Center_Click" Padding="12,7" Margin="4,0,0,0" Background="#1FFFFFFF"
-                    ToolTip="Aktivit&#xE4;tszentrum &#xF6;ffnen">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE91C;" FontSize="14" VerticalAlignment="Center"/>
-                    <TextBlock Text="Aktivit&#xE4;tszentrum" FontFamily="{DynamicResource Ui}" FontSize="11" FontWeight="SemiBold"
-                               Margin="7,0,0,0" VerticalAlignment="Center"/>
                 </StackPanel>
             </Button>
         </StackPanel>

@@ -1,0 +1,58 @@
+<Window x:Class="DesktopOverlay.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Onyx Einstellungen" Width="820" Height="600" MinWidth="680" MinHeight="460"
+        WindowStartupLocation="CenterScreen" Background="#0E0E11" Foreground="White"
+        FontFamily="{DynamicResource Ui}" TextOptions.TextFormattingMode="Ideal">
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="44" CornerRadius="0" GlassFrameThickness="0" ResizeBorderThickness="6" UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
+    <Window.Resources>
+        <Style TargetType="ScrollBar">
+            <Setter Property="Width" Value="6"/>
+            <Setter Property="MinWidth" Value="6"/>
+            <Setter Property="Margin" Value="0,44,3,6"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Track x:Name="PART_Track" IsDirectionReversed="True">
+                            <Track.Thumb>
+                                <Thumb>
+                                    <Thumb.Template>
+                                        <ControlTemplate TargetType="Thumb">
+                                            <Border CornerRadius="3" Background="#30FFFFFF"/>
+                                        </ControlTemplate>
+                                    </Thumb.Template>
+                                </Thumb>
+                            </Track.Thumb>
+                        </Track>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+    <Grid Background="#0E0E11">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="208"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Navigation -->
+        <Border Background="#08FFFFFF">
+            <StackPanel Margin="12,14,12,12">
+                <TextBlock Text="Einstellungen" FontSize="17" FontWeight="SemiBold" Margin="10,2,0,16"/>
+                <StackPanel x:Name="Nav"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Page -->
+        <Grid Grid.Column="1">
+            <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto" Focusable="False">
+                <StackPanel x:Name="Page" Margin="28,18,28,28" MaxWidth="620" HorizontalAlignment="Stretch"/>
+            </ScrollViewer>
+            <Button Style="{StaticResource IconButton}" Content="&#xE8BB;" FontSize="11" Padding="14,10" Margin="0,4,4,0"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" Click="Close_Click"
+                    WindowChrome.IsHitTestVisibleInChrome="True" ToolTip="Schließen"/>
+        </Grid>
+    </Grid>
+</Window>

@@ -12,7 +12,7 @@ using System.Windows.Threading;
 
 namespace DesktopOverlay;
 
-public enum FlyoutKind { Network, Volume, ActionCenter, TaskbarSettings, Tray, Design }
+public enum FlyoutKind { Network, Volume, ActionCenter, Tray }
 
 /// <summary>Taskbar pop-ups (network, volume, action center) in the overlay's own look, opened bottom-right above the taskbar.</summary>
 public partial class FlyoutWindow : Window
@@ -20,6 +20,7 @@ public partial class FlyoutWindow : Window
     private static readonly IEasingFunction Ease = new CubicEase { EasingMode = EasingMode.EaseOut };
     private static readonly CultureInfo De = CultureInfo.GetCultureInfo("de-DE");
     private FlyoutKind? _kind;
+    private double? _anchorX; // centered above this x instead of at the right edge
     private bool _closing;
     private DateTime _closedAt;
     private readonly DispatcherTimer _clock;
@@ -37,13 +38,15 @@ public partial class FlyoutWindow : Window
         _clock.Tick += (_, _) => { if (_bigTime != null) _bigTime.Text = DateTime.Now.ToString("HH:mm:ss"); };
         // The clock only ticks while the flyout is open.
         IsVisibleChanged += (_, _) => { if (IsVisible) _clock.Start(); else _clock.Stop(); };
+        // Apps come and go while the tray window is open.
+        Tray.Changed += () => Dispatcher.BeginInvoke(() => { if (IsVisible && _kind == FlyoutKind.Tray) Host.Content = BuildTray(); });
         // Wi-Fi list and notifications load after opening; keep the flyout anchored above the taskbar as it grows.
         SizeChanged += (_, _) => { if (IsVisible) Reposition(); };
     }
 
     // ---------- open / close ----------
 
-    public void Toggle(FlyoutKind kind, bool activate = true)
+    public void Toggle(FlyoutKind kind, bool activate = true, double? anchorX = null)
     {
         // A click on the tray button deactivates (closes) us first; don't reopen on that same click.
         if ((DateTime.Now - _closedAt).TotalMilliseconds < 250 && _kind == kind) return;
@@ -51,13 +54,13 @@ public partial class FlyoutWindow : Window
 
         _kind = kind;
         _closing = false;
+        _anchorX = anchorX;
+        Width = kind == FlyoutKind.Tray ? 216 : 380;
         Host.Content = kind switch
         {
             FlyoutKind.Network => BuildNetwork(),
             FlyoutKind.Volume => BuildVolume(),
-            FlyoutKind.TaskbarSettings => BuildTaskbarSettings(),
             FlyoutKind.Tray => BuildTray(),
-            FlyoutKind.Design => BuildDesign(),
             _ => BuildActionCenter(),
         };
         Panel.Opacity = 0;
@@ -74,7 +77,9 @@ public partial class FlyoutWindow : Window
 
     private void Reposition()
     {
-        Left = SystemParameters.PrimaryScreenWidth - ActualWidth - 2;
+        Left = _anchorX is { } x
+            ? Math.Min(x - ActualWidth / 2, SystemParameters.PrimaryScreenWidth - ActualWidth - 2)
+            : SystemParameters.PrimaryScreenWidth - ActualWidth - 2;
         Top = Math.Max(SystemParameters.WorkArea.Top, SystemParameters.WorkArea.Bottom - ActualHeight + 4);
     }
 
@@ -139,38 +144,6 @@ public partial class FlyoutWindow : Window
         return g;
     }
 
-    private FrameworkElement MediaCard()
-    {
-        var m = MediaService.Instance;
-        if (!m.HasSession) return null;
-        var card = new Border { Background = new SolidColorBrush(Color.FromArgb(0x14, 255, 255, 255)), CornerRadius = new CornerRadius(16), Padding = new Thickness(10), Margin = new Thickness(0, 14, 0, 0) };
-        var g = new Grid();
-        g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        g.ColumnDefinitions.Add(new ColumnDefinition());
-        g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        g.Children.Add(new Border
-        {
-            Width = 44, Height = 44, CornerRadius = new CornerRadius(10),
-            Background = m.Art != null ? new ImageBrush(m.Art) { Stretch = Stretch.UniformToFill } : new SolidColorBrush(Color.FromArgb(0x22, 255, 255, 255)),
-        });
-        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 8, 0) };
-        text.Children.Add(new TextBlock { Text = m.Title, FontSize = 13, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
-        text.Children.Add(new TextBlock { Text = m.Artist, FontSize = 11, Foreground = Dim, TextTrimming = TextTrimming.CharacterEllipsis });
-        Grid.SetColumn(text, 1);
-        g.Children.Add(text);
-        var controls = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        foreach (var (glyph, act) in new (string, Action)[] { ("", m.Previous), (m.IsPlaying ? "" : "", m.PlayPause), ("", m.Next) })
-        {
-            var b = new Button { Style = (Style)FindResource("IconButton"), Content = glyph, FontSize = 13 };
-            b.Click += (_, _) => act();
-            controls.Children.Add(b);
-        }
-        Grid.SetColumn(controls, 2);
-        g.Children.Add(controls);
-        card.Child = g;
-        return card;
-    }
-
     // ---------- volume ----------
 
     private FrameworkElement BuildVolume()
@@ -178,263 +151,8 @@ public partial class FlyoutWindow : Window
         var root = new StackPanel();
         root.Children.Add(Header("Lautstärke"));
         root.Children.Add(VolumeRow());
-        if (MediaCard() is { } media) root.Children.Add(media);
         root.Children.Add(LinkButton("Sound-Einstellungen", "ms-settings:sound"));
         return root;
-    }
-
-    // ---------- design ----------
-
-    private TextBlock SectionTitle(string text) => new() { Text = text, FontSize = 12, FontWeight = FontWeights.SemiBold, Foreground = Dim, Margin = new Thickness(2, 14, 0, 6) };
-
-    /// <summary>Slider for a setting between min and max; changes apply live and are saved right away.</summary>
-    private FrameworkElement DesignSlider(string label, double min, double max, Func<double> get, Action<double> set, Func<double, string> format)
-    {
-        var root = new StackPanel { Margin = new Thickness(2, 0, 0, 2) };
-        var head = new Grid();
-        head.Children.Add(new TextBlock { Text = label, FontSize = 12 });
-        var value = new TextBlock { FontSize = 12, Foreground = Dim, HorizontalAlignment = HorizontalAlignment.Right };
-        head.Children.Add(value);
-        root.Children.Add(head);
-        var slider = new VolumeSlider(() => (float)((get() - min) / (max - min)), v =>
-        {
-            set(min + v * (max - min));
-            Settings.Current.Save();
-        });
-        slider.Changed += (_, _) => value.Text = format(get());
-        slider.Loaded += (_, _) => slider.Refresh();
-        root.Children.Add(slider);
-        return root;
-    }
-
-    /// <summary>Row of pills of which one is selected.</summary>
-    private FrameworkElement Choice(string[] options, int selected, Action<int> pick)
-    {
-        var row = new System.Windows.Controls.Primitives.UniformGrid { Rows = 1, Margin = new Thickness(0, 0, 0, 4) };
-        var on = new SolidColorBrush(Color.FromArgb(0x30, 255, 255, 255));
-        var off = new SolidColorBrush(Color.FromArgb(0x10, 255, 255, 255));
-        for (int i = 0; i < options.Length; i++)
-        {
-            int index = i;
-            var chip = new Border
-            {
-                CornerRadius = new CornerRadius(10), Padding = new Thickness(6, 6, 6, 6), Margin = new Thickness(2), Cursor = Cursors.Hand,
-                Background = i == selected ? on : off,
-                Child = new TextBlock { Text = options[i], FontSize = 11, FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis },
-            };
-            chip.MouseLeftButtonUp += (_, _) =>
-            {
-                foreach (Border c in row.Children) c.Background = c == chip ? on : off;
-                pick(index);
-            };
-            row.Children.Add(chip);
-        }
-        return row;
-    }
-
-    private FrameworkElement BuildDesign()
-    {
-        var s = Settings.Current;
-        var app = (App)Application.Current;
-        var bar = app.Taskbar;
-        var root = new StackPanel();
-        root.Children.Add(Header("Design"));
-
-        root.Children.Add(new TextBlock { Text = "Theme", FontSize = 12, FontWeight = FontWeights.SemiBold, Foreground = Dim, Margin = new Thickness(2, 0, 0, 6) });
-        root.Children.Add(Choice(Theme.Presets.Select(p => p.Name).ToArray(), Array.FindIndex(Theme.Presets, p => p.Accent == s.AccentColor && p.Island == s.IslandColor), i =>
-        {
-            Theme.UsePreset(i);
-            Host.Content = BuildDesign(); // the switches and values shown here changed too
-        }));
-
-        void Pick(string title, string[] options, int selected, Action<int> apply, StackPanel into)
-        {
-            into.Children.Add(SectionTitle(title));
-            into.Children.Add(Choice(options, selected, i => { apply(i); s.Save(); }));
-        }
-
-        var general = Group(root, "Allgemein");
-        Pick("Akzentfarbe", new[] { "Blau", "Hellblau", "Grau", "Weiß" }, Array.IndexOf(Theme.AccentColors, s.AccentColor), i => { s.AccentColor = Theme.AccentColors[i]; Theme.ApplyAll(); }, general);
-        Pick("Schrift", Theme.Fonts.Select(f => f.Label).ToArray(), Array.FindIndex(Theme.Fonts, f => f.Family == s.FontFamily), i => { s.FontFamily = Theme.Fonts[i].Family; Theme.ApplyFont(); }, general);
-        Pick("Animationen", new[] { "Schnell", "Normal", "Aus" }, s.AnimationSpeed, i => s.AnimationSpeed = i, general);
-        Pick("Rand", new[] { "Keiner", "Dezent", "Akzent", "Lichtlauf" }, s.RimStyle, i => { s.RimStyle = i; Theme.ApplyAll(); }, general);
-        Pick("Oberfläche", new[] { "Glatt", "Glas-Körnung" }, s.Grain ? 1 : 0, i => { s.Grain = i == 1; Theme.ApplyAll(); }, general);
-
-        var taskbar = Group(root, "Taskleiste");
-        Pick("Form", new[] { "Leiste", "Dock", "Drei Inseln" }, s.TaskbarShape, i => { s.TaskbarShape = i; bar.ApplyLook(); }, taskbar);
-        Pick("App-Symbole", new[] { "Farbig", "Weiß", "Grau", "Akzent" }, s.IconTint, i => { s.IconTint = i; bar.ApplyLook(); }, taskbar);
-        Pick("App-Anzeige", new[] { "Strich", "Punkt", "Leuchten", "Aus" }, s.IndicatorStyle, i => { s.IndicatorStyle = i; bar.ApplyLook(); }, taskbar);
-        Pick("Uhr", new[] { "Mit Datum", "Nur Zeit", "Groß" }, s.ClockStyle, i => { s.ClockStyle = i; bar.ApplyLook(); }, taskbar);
-        Pick("Apps", new[] { "Mittig", "Links" }, s.TaskbarAppsLeft ? 1 : 0, i => { s.TaskbarAppsLeft = i == 1; bar.ApplyLook(); }, taskbar);
-        taskbar.Children.Add(SectionTitle("Größe"));
-        taskbar.Children.Add(DesignSlider("Höhe", 38, 64, () => s.TaskbarHeight, v => { s.TaskbarHeight = Math.Round(v); bar.ApplyLook(); }, v => $"{v:0} px"));
-        taskbar.Children.Add(DesignSlider("Symbolgröße", 18, 32, () => s.TaskbarIconSize, v => { s.TaskbarIconSize = Math.Round(v); bar.ApplyLook(); }, v => $"{v:0} px"));
-        taskbar.Children.Add(DesignSlider("Ecken", 0, 25, () => s.TaskbarRadius, v => { s.TaskbarRadius = Math.Round(v); bar.ApplyLook(); }, v => $"{v:0} px"));
-
-        var island = Group(root, "Island");
-        Pick("Form", new[] { "Schwebend", "Angedockt", "Kapsel" }, s.IslandShape, i => { s.IslandShape = i; app.Island.ApplyLook(); }, island);
-        Pick("Bewegung", new[] { "Weich", "Federnd", "Direkt" }, s.MotionStyle, i => s.MotionStyle = i, island);
-        island.Children.Add(SectionTitle("Größe"));
-        island.Children.Add(DesignSlider("Größe", 0.8, 1.2, () => s.IslandScale, v => { s.IslandScale = Math.Round(v, 2); app.Island.ApplyLook(); }, v => $"{v * 100:0} %"));
-        island.Children.Add(DesignSlider("Ecken", 0.2, 1, () => s.IslandCorners, v => { s.IslandCorners = Math.Round(v, 2); app.Island.ApplyLook(); }, v => $"{v * 100:0} %"));
-        island.Children.Add(DesignSlider("Deckkraft", 0.4, 1, () => s.IslandOpacity, v => { s.IslandOpacity = Math.Round(v, 2); app.Island.ApplyLook(); }, v => $"{v * 100:0} %"));
-
-        var widgets = Group(root, "Widgets");
-        Pick("Anzeige", new[] { "Linie", "Balken", "Ringe" }, s.WidgetGraph, i => s.WidgetGraph = i, widgets);
-        Pick("Anordnung", new[] { "Ein Block", "Einzeln" }, s.WidgetsFree ? 1 : 0, i => { s.WidgetsFree = i == 1; app.ApplyWidgetLayout(); }, widgets);
-        widgets.Children.Add(SectionTitle("Größe"));
-        widgets.Children.Add(DesignSlider("Größe", 0.7, 1.3, () => s.WidgetScale, v => { s.WidgetScale = Math.Round(v, 2); app.ApplyWidgetLook(); }, v => $"{v * 100:0} %"));
-        widgets.Children.Add(DesignSlider("Deckkraft", 0.3, 1, () => s.WidgetOpacity, v => { s.WidgetOpacity = Math.Round(v, 2); app.ApplyWidgetLook(); }, v => $"{v * 100:0} %"));
-
-        var names = Theme.Names().ToArray();
-        var time = Group(root, "Tageszeit");
-        Pick("Automatisch wechseln (7 und 19 Uhr)", new[] { "Aus", "An" }, s.AutoTheme ? 1 : 0, i => { s.AutoTheme = i == 1; Theme.CheckTimeOfDay(force: true); }, time);
-        Pick("Am Tag", names, Array.IndexOf(names, s.DayTheme), i => { s.DayTheme = names[i]; Theme.CheckTimeOfDay(force: true); }, time);
-        Pick("In der Nacht", names, Array.IndexOf(names, s.NightTheme), i => { s.NightTheme = names[i]; Theme.CheckTimeOfDay(force: true); }, time);
-
-        BuildOwnThemes(Group(root, "Eigene Themes"));
-
-        var effects = Group(root, "Effekte");
-        Pick("Musik-Glow", new[] { "Aus", "Akzentfarbe", "Cover-Farbe" }, s.MusicGlow, i => { s.MusicGlow = i; app.Island.ApplyGlow(); }, effects);
-        Pick("Hitze-Alarm", new[] { "Aus", "An" }, s.HeatAlarm ? 1 : 0, i => s.HeatAlarm = i == 1, effects);
-        effects.Children.Add(DesignSlider("Warnen ab", 70, 100, () => s.HeatLimit, v => s.HeatLimit = Math.Round(v), v => $"{v:0} °C"));
-
-        BuildProfiles(Group(root, "Profile"));
-        return root;
-    }
-
-    /// <summary>Per-app themes: while such an app is in front, its theme is shown.</summary>
-    private void BuildProfiles(StackPanel into)
-    {
-        var s = Settings.Current;
-        void Reload() => Host.Content = BuildDesign();
-        into.Children.Add(new TextBlock { Text = "Solange eine dieser Apps im Vordergrund ist, gilt ihr Theme.", FontSize = 11, Foreground = Dim, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(2, 0, 0, 8) });
-
-        foreach (var (program, theme) in s.Profiles.ToList())
-        {
-            var row = new Grid { Margin = new Thickness(2, 0, 0, 4) };
-            row.ColumnDefinitions.Add(new ColumnDefinition());
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            row.Children.Add(new TextBlock { Text = System.IO.Path.GetFileNameWithoutExtension(program), FontSize = 12, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
-            // A click moves on to the next theme.
-            var pick = new Button { Style = (Style)FindResource("IconButton"), Background = new SolidColorBrush(Color.FromArgb(0x1A, 255, 255, 255)), Padding = new Thickness(10, 5, 10, 5), Content = new TextBlock { Text = theme, FontFamily = (FontFamily)FindResource("Ui"), FontSize = 11 }, ToolTip = "Theme wechseln" };
-            pick.Click += (_, _) =>
-            {
-                var names = Theme.Names();
-                s.Profiles[program] = names[(names.IndexOf(s.Profiles[program]) + 1) % names.Count];
-                s.Save();
-                Reload();
-            };
-            Grid.SetColumn(pick, 1);
-            row.Children.Add(pick);
-            var delete = new Button { Style = (Style)FindResource("IconButton"), Content = "", FontSize = 12, Margin = new Thickness(4, 0, 0, 0), ToolTip = "Entfernen" };
-            delete.Click += (_, _) => { s.Profiles.Remove(program); s.Save(); Reload(); };
-            Grid.SetColumn(delete, 2);
-            row.Children.Add(delete);
-            into.Children.Add(row);
-        }
-
-        var add = new Button { Style = (Style)FindResource("Row"), Margin = new Thickness(0, 4, 0, 0), Content = new TextBlock { Text = "Laufende App hinzufügen", FontSize = 12 } };
-        add.Click += async (_, _) =>
-        {
-            var apps = (await Task.Run(CollectRunningApps)).Where(a => a.HasWindow).OrderBy(a => a.Name).ToList();
-            var menu = new ContextMenu { PlacementTarget = add, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
-            foreach (var running in apps)
-            {
-                var item = new MenuItem { Header = running.Name };
-                item.Click += (_, _) => { s.Profiles[System.IO.Path.GetFileName(running.Path)] = Theme.Names()[0]; s.Save(); Reload(); };
-                menu.Items.Add(item);
-            }
-            menu.IsOpen = menu.Items.Count > 0;
-        };
-        into.Children.Add(add);
-    }
-
-    private void BuildOwnThemes(StackPanel into)
-    {
-        void Reload() => Host.Content = BuildDesign();
-        var filter = "Onyx-Theme (*.onyxtheme)|*.onyxtheme";
-
-        var save = new Grid { Margin = new Thickness(0, 0, 0, 8) };
-        save.ColumnDefinitions.Add(new ColumnDefinition());
-        save.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var name = new TextBox
-        {
-            Text = "Mein Theme", FontSize = 12, Foreground = Brushes.White, CaretBrush = Brushes.White, BorderThickness = new Thickness(0), Padding = new Thickness(8, 5, 8, 5),
-            Background = new SolidColorBrush(Color.FromArgb(0x14, 255, 255, 255)), VerticalContentAlignment = VerticalAlignment.Center,
-        };
-        save.Children.Add(name);
-        var saveBtn = new Button { Style = (Style)FindResource("IconButton"), Content = "", FontSize = 13, Padding = new Thickness(10, 6, 10, 6), Margin = new Thickness(6, 0, 0, 0), ToolTip = "Aktuelles Design speichern" };
-        saveBtn.Click += (_, _) =>
-        {
-            if (string.IsNullOrWhiteSpace(name.Text)) return;
-            Theme.SaveCurrent(name.Text.Trim());
-            Reload();
-        };
-        Grid.SetColumn(saveBtn, 1);
-        save.Children.Add(saveBtn);
-        into.Children.Add(save);
-
-        foreach (var theme in Settings.Current.CustomThemes.Keys.ToList())
-        {
-            var row = new Grid { Margin = new Thickness(0, 0, 0, 2) };
-            row.ColumnDefinitions.Add(new ColumnDefinition());
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            var use = new Button { Style = (Style)FindResource("Row"), Content = new TextBlock { Text = theme, FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis }, ToolTip = "Anwenden" };
-            use.Click += (_, _) => { Theme.Use(theme); Reload(); };
-            row.Children.Add(use);
-            var actions = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(4, 0, 0, 0) };
-            var share = new Button { Style = (Style)FindResource("IconButton"), Content = "", FontSize = 12, ToolTip = "Als Datei exportieren" };
-            share.Click += (_, _) =>
-            {
-                var dialog = new Microsoft.Win32.SaveFileDialog { FileName = theme + ".onyxtheme", Filter = filter };
-                if (dialog.ShowDialog() == true) Theme.Export(theme, dialog.FileName);
-            };
-            var delete = new Button { Style = (Style)FindResource("IconButton"), Content = "", FontSize = 12, ToolTip = "Löschen" };
-            delete.Click += (_, _) =>
-            {
-                Settings.Current.CustomThemes.Remove(theme);
-                Settings.Current.Save();
-                Reload();
-            };
-            actions.Children.Add(share);
-            actions.Children.Add(delete);
-            Grid.SetColumn(actions, 1);
-            row.Children.Add(actions);
-            into.Children.Add(row);
-        }
-
-        var import = new Button { Style = (Style)FindResource("Row"), Margin = new Thickness(0, 6, 0, 0), Content = new TextBlock { Text = "Theme-Datei importieren", FontSize = 12 } };
-        import.Click += (_, _) =>
-        {
-            var dialog = new Microsoft.Win32.OpenFileDialog { Filter = filter };
-            if (dialog.ShowDialog() == true && Theme.Import(dialog.FileName) is { } imported) Theme.Use(imported);
-        };
-        into.Children.Add(import);
-    }
-
-    private static readonly HashSet<string> OpenGroups = new() { "Allgemein" };
-
-    /// <summary>Foldable section, so the page stays short. Returns the panel for its content.</summary>
-    private StackPanel Group(StackPanel parent, string title)
-    {
-        var body = new StackPanel { Margin = new Thickness(0, 0, 0, 6), Visibility = OpenGroups.Contains(title) ? Visibility.Visible : Visibility.Collapsed };
-        var head = new Grid { Background = Brushes.Transparent, Cursor = Cursors.Hand, Margin = new Thickness(2, 12, 2, 4) };
-        head.Children.Add(new TextBlock { Text = title, FontSize = 13, FontWeight = FontWeights.SemiBold });
-        var arrow = Glyph(OpenGroups.Contains(title) ? "" : "", 11);
-        arrow.HorizontalAlignment = HorizontalAlignment.Right;
-        head.Children.Add(arrow);
-        head.MouseLeftButtonUp += (_, _) =>
-        {
-            bool open = body.Visibility != Visibility.Visible;
-            body.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-            arrow.Text = open ? "" : "";
-            if (open) OpenGroups.Add(title); else OpenGroups.Remove(title);
-        };
-        parent.Children.Add(head);
-        parent.Children.Add(body);
-        return body;
     }
 
     // ---------- tray overflow ----------
@@ -442,50 +160,9 @@ public partial class FlyoutWindow : Window
     private FrameworkElement BuildTray()
     {
         var root = new StackPanel();
-        root.Children.Add(Header("Weitere Symbole"));
         var icons = new WrapPanel();
         foreach (var icon in Tray.Visible()) icons.Children.Add(Tray.Button(icon));
         root.Children.Add(icons);
-        return root;
-    }
-
-    // ---------- taskbar settings ----------
-
-    private FrameworkElement BuildTaskbarSettings()
-    {
-        var s = Settings.Current;
-        var bar = ((App)Application.Current).Taskbar;
-        var root = new StackPanel();
-        root.Children.Add(Header("Taskleiste"));
-
-        // Transparency: 0 % = opaque, 100 % = as see-through as the bar allows
-        var label = new Grid { Margin = new Thickness(2, 0, 0, 6) };
-        label.Children.Add(new TextBlock { Text = "Transparenz", FontSize = 12, FontWeight = FontWeights.SemiBold });
-        var pct = new TextBlock { FontSize = 12, Foreground = Dim, HorizontalAlignment = HorizontalAlignment.Right };
-        label.Children.Add(pct);
-        root.Children.Add(label);
-        var slider = new VolumeSlider(() => (float)s.Transparency, v =>
-        {
-            s.TaskbarTransparency = Math.Round(v, 2);
-            bar.ApplyLook();
-            s.Save();
-        });
-        slider.Changed += (v, _) => pct.Text = $"{v * 100:0} %";
-        slider.Loaded += (_, _) => slider.Refresh();
-        root.Children.Add(slider);
-
-        // Auto-hide
-        var row = new Grid { Margin = new Thickness(2, 16, 0, 0) };
-        var text = new StackPanel();
-        text.Children.Add(new TextBlock { Text = "Automatisch einklappen", FontSize = 12, FontWeight = FontWeights.SemiBold });
-        text.Children.Add(new TextBlock { Text = "Erscheint, wenn die Maus den unteren Rand berührt", FontSize = 11, Foreground = Dim, Margin = new Thickness(0, 2, 0, 0) });
-        row.Children.Add(text);
-        var sw = new ToggleSwitch(s.TaskbarAutoHide) { HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
-        sw.Toggled += v => { s.TaskbarAutoHide = v; s.Save(); bar.ApplyAutoHide(); };
-        row.Children.Add(sw);
-        root.Children.Add(row);
-
-        root.Children.Add(LinkButton("Windows-Taskleisteneinstellungen", "ms-settings:taskbar"));
         return root;
     }
 
@@ -622,18 +299,12 @@ public partial class FlyoutWindow : Window
             b.Click += (_, _) => act();
             tiles.Children.Add(b);
         }
-        Tile("", "Netzwerk", () => Toggle(FlyoutKind.Network));
         Tile("", "Bluetooth", () => Run("ms-settings:bluetooth"));
         Tile("", "Nachtlicht", () => Run("ms-settings:nightlight"));
         Tile("", "Nicht stören", () => Run("ms-settings:notifications"));
         Tile("", "Energie", () => Run("ms-settings:powersleep"));
         Tile("", "Einstellungen", () => Run("ms-settings:"));
         root.Children.Add(tiles);
-
-        var vol = VolumeRow();
-        vol.Margin = new Thickness(0, 12, 0, 0);
-        root.Children.Add(vol);
-        if (MediaCard() is { } media) root.Children.Add(media);
 
         // Notifications
         root.Children.Add(new TextBlock { Text = "Benachrichtigungen", FontSize = 12, FontWeight = FontWeights.SemiBold, Margin = new Thickness(2, 16, 0, 6) });
@@ -680,7 +351,7 @@ public partial class FlyoutWindow : Window
 
     // ---------- running apps ----------
 
-    private sealed record RunningApp(string Path, string Name, int[] Pids, long Bytes, bool HasWindow);
+    internal sealed record RunningApp(string Path, string Name, int[] Pids, long Bytes, bool HasWindow);
 
     /// <summary>All user apps that are running (with or without a window), grouped by program, each with an end button.</summary>
     private FrameworkElement RunningAppsSection()
@@ -707,7 +378,7 @@ public partial class FlyoutWindow : Window
         scroll.ScrollToTop(); // background apps are listed first
     }
 
-    private static List<RunningApp> CollectRunningApps()
+    internal static List<RunningApp> CollectRunningApps()
     {
         int session = Process.GetCurrentProcess().SessionId, self = Environment.ProcessId;
         var windir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);

@@ -18,7 +18,6 @@ public partial class TaskbarWindow : Window
     private static readonly Brush HoverBrush = new SolidColorBrush(Color.FromArgb(0x26, 255, 255, 255));
     private static readonly Brush NoBrush = new SolidColorBrush(Color.FromArgb(0x01, 0, 0, 0));
 
-    private readonly MediaService _media = MediaService.Instance;
     private IntPtr _hwnd;
     private uint _callbackMsg;
     private const double Gap = 8; // floating distance from the screen edges
@@ -33,7 +32,6 @@ public partial class TaskbarWindow : Window
         Closed += (_, _) => UnregisterAppBar();
 
         SourceInitialized += (_, _) => ApplyLook();
-        _media.Updated += UpdateMedia;
 
         var t = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000) };
         t.Tick += (_, _) => Refresh();
@@ -41,8 +39,7 @@ public partial class TaskbarWindow : Window
         Refresh();
         HookWindowEvents();
         StartFullscreenWatch();
-        foreach (var panel in new FrameworkElement[] { CenterPanel, RightPanel, MediaChip, Root }) panel.SizeChanged += (_, _) => UpdateShape();
-        UpdateMedia();
+        foreach (var panel in new FrameworkElement[] { CenterPanel, RightPanel, Root }) panel.SizeChanged += (_, _) => UpdateShape();
     }
 
     public void ApplyLook()
@@ -52,7 +49,7 @@ public partial class TaskbarWindow : Window
         var s = Settings.Current;
         var surface = Theme.Surface(s.TaskbarColor, alpha);
         var (rim, rimWidth) = Theme.Rim(subtle: true);
-        foreach (var b in new[] { Bg, BgLeft, BgMid, BgRight })
+        foreach (var b in new[] { Bg, BgMid, BgRight })
         {
             b.Background = surface;
             b.BorderBrush = rim;
@@ -82,39 +79,33 @@ public partial class TaskbarWindow : Window
 
     /// <summary>
     /// Bar form: 0 = one bar across the screen, 1 = dock (only as wide as its content, centered),
-    /// 2 = three separate islands for music, apps and tray. The window stays full width; its transparent parts let clicks through.
+    /// 2 = separate islands for apps and tray. The window stays full width; its transparent parts let clicks through.
     /// </summary>
     private void UpdateShape()
     {
         var s = Settings.Current;
         bool islands = s.TaskbarShape == 2, dock = s.TaskbarShape == 1;
-        bool media = MediaChip.Visibility == Visibility.Visible;
         Bg.Visibility = islands ? Visibility.Collapsed : Visibility.Visible;
-        BgLeft.Visibility = BgMid.Visibility = BgRight.Visibility = islands ? Visibility.Visible : Visibility.Collapsed;
+        BgMid.Visibility = BgRight.Visibility = islands ? Visibility.Visible : Visibility.Collapsed;
 
         if (dock)
         {
             const double gap = 10;
-            double music = media ? MediaChip.ActualWidth + gap : 0;
-            double total = gap + music + CenterPanel.ActualWidth + gap + RightPanel.ActualWidth + gap;
+            double total = gap + CenterPanel.ActualWidth + gap + RightPanel.ActualWidth + gap;
             double x = Math.Max(0, (Root.ActualWidth - total) / 2);
-            Bg.HorizontalAlignment = MediaChip.HorizontalAlignment = CenterPanel.HorizontalAlignment = RightPanel.HorizontalAlignment = HorizontalAlignment.Left;
+            Bg.HorizontalAlignment = CenterPanel.HorizontalAlignment = RightPanel.HorizontalAlignment = HorizontalAlignment.Left;
             Bg.Width = total;
             Bg.Margin = new Thickness(x, 0, 0, 0);
-            MediaChip.Margin = new Thickness(x + gap, 6, 0, 6);
-            CenterPanel.Margin = new Thickness(x + gap + music, 0, 0, 0);
-            RightPanel.Margin = new Thickness(x + gap + music + CenterPanel.ActualWidth + gap, 0, 0, 0);
+            CenterPanel.Margin = new Thickness(x + gap, 0, 0, 0);
+            RightPanel.Margin = new Thickness(x + gap + CenterPanel.ActualWidth + gap, 0, 0, 0);
             return;
         }
 
-        // Apps on the left: the music chip moves to the middle so they don't overlap.
         Bg.HorizontalAlignment = HorizontalAlignment.Stretch;
         Bg.Width = double.NaN;
         Bg.Margin = new Thickness(0);
         CenterPanel.HorizontalAlignment = s.TaskbarAppsLeft ? HorizontalAlignment.Left : HorizontalAlignment.Center;
         CenterPanel.Margin = new Thickness(s.TaskbarAppsLeft ? 6 : 0, 0, 0, 0);
-        MediaChip.HorizontalAlignment = s.TaskbarAppsLeft ? HorizontalAlignment.Center : HorizontalAlignment.Left;
-        MediaChip.Margin = new Thickness(10, 6, 10, 6);
         RightPanel.HorizontalAlignment = HorizontalAlignment.Right;
         RightPanel.Margin = new Thickness(0, 0, 10, 0);
 
@@ -122,7 +113,6 @@ public partial class TaskbarWindow : Window
         // The panels may only just have moved, so measure after this layout pass.
         Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
         {
-            Wrap(BgLeft, MediaChip);
             Wrap(BgMid, CenterPanel);
             Wrap(BgRight, RightPanel);
         });
@@ -157,24 +147,21 @@ public partial class TaskbarWindow : Window
 
     // ---------- notification area ----------
 
-    private const int MaxTrayIcons = 8; // more go behind the arrow, so the bar stays tidy
-
     public void StartTray()
     {
-        Tray.Changed += () => Dispatcher.BeginInvoke(RebuildTray);
+        Tray.Changed += () => Dispatcher.BeginInvoke(ShowTrayButton);
         Tray.Start();
-        RebuildTray();
+        ShowTrayButton();
     }
 
-    private void RebuildTray()
+    private void ShowTrayButton() => TrayBtn.Visibility = Tray.Visible().Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    private void Tray_Click(object sender, RoutedEventArgs e)
     {
-        TrayPanel.Children.Clear();
-        var icons = Tray.Visible();
-        foreach (var icon in icons.Take(MaxTrayIcons)) TrayPanel.Children.Add(Tray.Button(icon));
-        if (icons.Count <= MaxTrayIcons) return;
-        var more = new Button { Style = (Style)FindResource("TrayButton"), Content = "", FontSize = 11, ToolTip = "Weitere Symbole" };
-        more.Click += (_, _) => Flyout.Toggle(FlyoutKind.Tray);
-        TrayPanel.Children.Add(more);
+        // The window opens directly above the arrow.
+        var center = TrayBtn.PointToScreen(new Point(TrayBtn.ActualWidth / 2, 0));
+        var scale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice.M11 ?? 1;
+        Flyout.Toggle(FlyoutKind.Tray, anchorX: center.X * scale);
     }
 
     // ---------- auto-hide ----------
@@ -604,7 +591,7 @@ public partial class TaskbarWindow : Window
             menu.Items.Add(item);
         }
         Item("", "Task-Manager", () => Open("taskmgr.exe"));
-        Item("", "Taskleisteneinstellungen", () => Flyout.Toggle(FlyoutKind.TaskbarSettings));
+        Item("", "Einstellungen", () => ((App)Application.Current).OpenSettings());
         menu.IsOpen = true;
         e.Handled = true;
     }
@@ -650,27 +637,4 @@ public partial class TaskbarWindow : Window
         VolBtn.Content = Volume.IsMuted() ? "" : v < 0.33 ? "" : v < 0.66 ? "" : "";
     }
 
-    // ---------- media ----------
-
-    private void UpdateMedia()
-    {
-        MediaChip.Visibility = _media.HasSession ? Visibility.Visible : Visibility.Collapsed;
-        UpdateShape();
-        TitleText.Text = _media.Title;
-        ArtistText.Text = _media.Artist;
-        PlayBtn.Content = _media.IsPlaying ? "" : "";
-        var art = _media.Art;
-        Art.Background = art != null ? new ImageBrush(art) { Stretch = Stretch.UniformToFill } : new SolidColorBrush(Color.FromArgb(0x22, 255, 255, 255));
-        ArtIcon.Visibility = art == null ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    private void Media_MouseEnter(object sender, MouseEventArgs e) =>
-        MediaControls.BeginAnimation(OpacityProperty, new DoubleAnimation(1, Theme.Ms(150)));
-    private void Media_MouseLeave(object sender, MouseEventArgs e) =>
-        MediaControls.BeginAnimation(OpacityProperty, new DoubleAnimation(0, Theme.Ms(150)));
-
-    private void Art_Click(object sender, MouseButtonEventArgs e) => _media.PlayPause();
-    private void Prev_Click(object sender, RoutedEventArgs e) => _media.Previous();
-    private void Play_Click(object sender, RoutedEventArgs e) => _media.PlayPause();
-    private void Next_Click(object sender, RoutedEventArgs e) => _media.Next();
 }

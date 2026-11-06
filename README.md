@@ -24,8 +24,8 @@ Onyx legt sich über deinen Windows-Desktop und ersetzt die Taskleiste durch ein
 
 | | |
 |---|---|
-| 🏝️ **Dynamic Island** | Oben in der Mitte – zeigt das aktuelle Lied, klappt beim Darüberfahren auf und zeigt CPU, RAM, Netzwerk und Lautstärke. |
-| 📌 **Eigene Taskleiste** | Schwebend und abgerundet, mit deinen angepinnten Apps, eigenem Startmenü und eigenen Popups. |
+| 🏝️ **Dynamic Island** | Oben in der Mitte – zeigt das aktuelle Lied und klappt beim Darüberfahren auf, mit Steuerung und Lautstärke. |
+| 📌 **Eigene Taskleiste** | Schwebend und aufgeräumt: deine Apps, Netzwerk, Lautstärke und Uhr. |
 | 📊 **Desktop-Widgets** | Netzwerk, GPU- und CPU-Temperatur, CPU-Verlauf, RAM und Festplatten – frei anordnen. |
 | 🎨 **Anpassbar** | Farben, Transparenz, automatisches Einklappen, Autostart. |
 
@@ -51,12 +51,12 @@ Danach erscheint die Temperatur von selbst.
 
 ### 🔁 Mit Windows starten
 
-Island aufklappen → **Zahnrad** → **„Mit Windows starten“** einschalten.
+Island aufklappen → **Zahnrad** → **Allgemein** → **„Mit Windows starten“** einschalten.
 Läuft Onyx dabei als Admin, startet es später automatisch mit Adminrechten (ohne Nachfrage), damit die Temperatur funktioniert.
 
 ### ⬆️ Updates
 
-Onyx prüft selbst, ob es eine neue Version gibt. Dann wird das **Zahnrad in der Island blau**: Zahnrad → **„Update auf x.y.z“** klicken, den Rest erledigt Onyx. Die Datei wird vor dem Austausch geprüft, und die Einstellungen bleiben erhalten.
+Onyx prüft selbst, ob es eine neue Version gibt. Dann wird das **Zahnrad in der Island blau**: Zahnrad → **Allgemein** → **„Aktualisieren“** klicken, den Rest erledigt Onyx. Die Datei wird vor dem Austausch geprüft, und die Einstellungen bleiben erhalten.
 
 ---
 
@@ -65,10 +65,10 @@ Onyx prüft selbst, ob es eine neue Version gibt. Dann wird das **Zahnrad in der
 ### Dynamic Island
 | Aktion | Ergebnis |
 |---|---|
-| Maus darüber | Island klappt auf (Player, CPU, RAM, Netzwerk, Lautstärke) |
+| Maus darüber | Island klappt auf (Player und Lautstärke) |
 | Klick auf das Cover | Play / Pause |
-| **Zahnrad** | Einstellungen in der Island |
-| Rechtsklick | Schnellmenü inkl. **Beenden** |
+| **Zahnrad** | Öffnet das Einstellungsfenster |
+| Rechtsklick | Einstellungen und **Beenden** |
 
 ### Taskleiste
 | Aktion | Ergebnis |
@@ -76,27 +76,19 @@ Onyx prüft selbst, ob es eine neue Version gibt. Dann wird das **Zahnrad in der
 | **Windows-Taste** / Start-Logo | Eigenes Startmenü mit Suche über alle Apps |
 | Klick auf App | Öffnen bzw. in den Vordergrund holen |
 | Rechtsklick auf App | Neues Fenster / Fenster schließen |
-| Rechtsklick auf freie Stelle | **Task-Manager** und **Taskleisteneinstellungen** |
+| Rechtsklick auf freie Stelle | **Task-Manager** und **Einstellungen** |
 | WLAN- / Lautstärke-Symbol | Eigene Popups |
-| Symbole von Hintergrund-Apps | Links- und Rechtsklick wie bei Windows (Steam, Discord, …) |
-| **Aktivitätszentrum** | Schnellaktionen, Benachrichtigungen, laufende Apps beenden, Kalender |
+| Pfeil neben dem Netzwerk-Symbol | Fenster mit den Symbolen der Hintergrund-Apps (Steam, Discord, …) |
+| **Uhr** | Aktivitätszentrum: Schnellaktionen, Benachrichtigungen, laufende Apps beenden, Kalender |
 
 **In Vollbild-Spielen** verschwindet die Taskleiste automatisch. Mit der **Windows-Taste** kommt sie zurück, bis du wieder ins Spiel klickst.
 
-### Taskleisteneinstellungen
-Rechtsklick auf die Taskleiste → **Taskleisteneinstellungen**:
-- **Transparenz** – Regler von undurchsichtig bis sehr durchsichtig
-- **Automatisch einklappen** – Leiste erscheint erst, wenn die Maus den unteren Rand berührt
-
 ### Widgets anordnen
-Island → Zahnrad → **„Widgets anordnen“** → Widgets mit der Maus verschieben → **„Fertig“**.
+Einstellungen → **Widgets** → **„Anordnen“** → Widgets mit der Maus verschieben → **„Fertig“**.
 Die Positionen bleiben auch nach einem Neustart gespeichert.
 
-### Farben
-Island → Zahnrad → unten **Island / Leiste / Widgets** wählen und eine Farbe anklicken.
-
 ### Design
-Island → Zahnrad → **„Design“**. Alles wirkt sofort:
+Island → Zahnrad öffnet das Einstellungsfenster. Alles wirkt sofort:
 
 - **Allgemein:** Themes, Akzentfarbe, Schrift, Animationstempo, Rand (auch als Lichtlauf), Glas-Körnung
 - **Taskleiste:** Form (Leiste, Dock, Drei Inseln), einfarbige App-Symbole, App-Anzeige, Uhr-Stil, Größen
@@ -117,7 +109,7 @@ Island → Zahnrad → **„Design“**. Alles wirkt sofort:
 <details>
 <summary><b>Wie beende ich Onyx?</b></summary>
 
-Rechtsklick auf die Island → **Beenden** (oder Zahnrad → „Beenden“). Die normale Windows-Taskleiste kommt dann sofort zurück.
+Rechtsklick auf die Island → **Beenden** (oder Zahnrad → Allgemein → „Beenden“). Die normale Windows-Taskleiste kommt dann sofort zurück.
 </details>
 
 <details>

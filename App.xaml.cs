@@ -69,7 +69,7 @@ public partial class App : Application
 
         if (e.Args.Contains("--probe")) Probe();
         var snap = Array.IndexOf(e.Args, "--snapshot");
-        if (snap >= 0 && snap + 1 < e.Args.Length) Snapshot(e.Args[snap + 1], e.Args.Contains("design") ? FlyoutKind.Design : FlyoutKind.ActionCenter);
+        if (snap >= 0 && snap + 1 < e.Args.Length) Snapshot(e.Args[snap + 1], e.Args.Contains("tray") ? FlyoutKind.Tray : FlyoutKind.ActionCenter);
     }
 
     /// <summary>Restarts the overlay with admin rights (needed for the CPU temperature sensor). Shows the UAC prompt.</summary>
@@ -81,6 +81,20 @@ public partial class App : Application
             Quit();
         }
         catch { /* UAC prompt cancelled */ }
+    }
+
+    private SettingsWindow _settings;
+
+    /// <summary>Opens the settings, or brings them to the front. Closing frees the window, so it costs nothing until needed.</summary>
+    public void OpenSettings()
+    {
+        if (_settings == null)
+        {
+            _settings = new SettingsWindow();
+            _settings.Closed += (_, _) => _settings = null;
+            _settings.Show();
+        }
+        Win32.Activate(new System.Windows.Interop.WindowInteropHelper(_settings).Handle);
     }
 
     /// <summary>Installs the update found by <see cref="UpdateService"/> and restarts into the new version.</summary>
@@ -125,6 +139,10 @@ public partial class App : Application
         Flyout.Toggle(flyout, activate: false);
         await Task.Delay(4000);
         System.IO.Directory.CreateDirectory(dir);
+        var settings = new SettingsWindow { ShowActivated = false };
+        settings.Show();
+        settings.RenderPages(dir);
+        settings.Close();
         foreach (Window w in Windows)
         {
             if (w.Content is not System.Windows.FrameworkElement el || el.ActualWidth < 1) continue;

@@ -9,7 +9,7 @@ namespace DesktopOverlay;
 
 public partial class IslandWindow : Window
 {
-    private const double ExpandedW = 480, ExpandedH = 160;
+    private const double ExpandedW = 400, ExpandedH = 160;
     private static bool Capsule => Settings.Current.IslandShape == 2;
     private static double CompactW => Capsule ? 180 : 240;
     private static double CompactH => Capsule ? 40 : 34;
@@ -41,7 +41,7 @@ public partial class IslandWindow : Window
         _collapseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) }; // short grace period against accidental mouse-outs
         _collapseTimer.Tick += (_, _) => { _collapseTimer.Stop(); if (!_hovering && !_menuOpen && !Settings.Current.AlwaysExpanded) SetExpanded(false); };
 
-        _sys.Updated += UpdateStats;
+        _sys.Updated += CheckHeat;
         _media.Updated += UpdateMedia;
         TaskbarWindow.FullscreenChanged += full => { if (full) Hide(); else Show(); };
         VolSlider.Changed += (v, muted) =>
@@ -59,12 +59,12 @@ public partial class IslandWindow : Window
         ApplyLook();
         if (Settings.Current.AlwaysExpanded) SetExpanded(true, animate: false);
         UpdateMedia();
-        UpdateStats();
     }
 
     // ---------- expand / collapse ----------
 
     public void ForceExpand() => SetExpanded(true, animate: false);
+    public void ApplyAlwaysExpanded() => SetExpanded(Settings.Current.AlwaysExpanded || _hovering);
 
     private void SetExpanded(bool expand, bool animate = true)
     {
@@ -86,181 +86,7 @@ public partial class IslandWindow : Window
         if (expand) VolSlider.Refresh();
     }
 
-    // ---------- settings page ----------
-
-    private void Settings_Click(object sender, RoutedEventArgs e) => ShowSettings(true);
-
-    private void ShowSettings(bool show, bool animate = true)
-    {
-        if (show) BuildSettings();
-        var from = show ? (FrameworkElement)HomeView : SettingsView;
-        var to = show ? (FrameworkElement)SettingsView : HomeView;
-        if (to.Visibility == Visibility.Visible && from.Visibility != Visibility.Visible) return;
-        var dur = TimeSpan.FromMilliseconds(animate ? 200 * Theme.Speed : 0);
-        var fadeOut = new DoubleAnimation(0, dur) { EasingFunction = FadeEase };
-        fadeOut.Completed += (_, _) => { if (to.Visibility == Visibility.Visible) from.Visibility = Visibility.Collapsed; };
-        from.BeginAnimation(OpacityProperty, fadeOut);
-        to.Visibility = Visibility.Visible;
-        to.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, dur) { EasingFunction = FadeEase, BeginTime = TimeSpan.FromMilliseconds(animate ? 90 : 0) });
-    }
-
-    private void BuildSettings()
-    {
-        var s = Settings.Current;
-        var app = (App)Application.Current;
-        SettingsView.Children.Clear();
-        SettingsView.RowDefinitions.Clear();
-        SettingsView.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        SettingsView.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        SettingsView.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-        // Header: back, title, quit
-        var header = new Grid { Margin = new Thickness(0, 0, 0, 4) };
-        var back = new Button { Style = (Style)FindResource("IconButton"), Content = "", FontSize = 12, Padding = new Thickness(8, 5, 8, 5), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(-8, 0, 0, 0) };
-        back.Click += (_, _) => ShowSettings(false);
-        header.Children.Add(back);
-        header.Children.Add(new TextBlock { Text = "Einstellungen", FontSize = 14, FontWeight = FontWeights.Bold, Margin = new Thickness(26, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
-        var quit = Pill("Beenden", "", () => app.Quit());
-        var right = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-        right.Children.Add(quit);
-        header.Children.Add(right);
-        SettingsView.Children.Add(header);
-
-        var grid = new System.Windows.Controls.Primitives.UniformGrid { Columns = 2, VerticalAlignment = VerticalAlignment.Center };
-        Grid.SetRow(grid, 1);
-        void Option(string label, bool value, Action<bool> onChange)
-        {
-            var row = new Grid { Margin = new Thickness(0, 0, 14, 0), Height = 26 };
-            row.Children.Add(new TextBlock { Text = label, FontSize = 12, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
-            var sw = new ToggleSwitch(value) { HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
-            sw.Toggled += v => { onChange(v); s.Save(); };
-            row.Children.Add(sw);
-            grid.Children.Add(row);
-        }
-        Option("Immer ausgeklappt", s.AlwaysExpanded, v => s.AlwaysExpanded = v);
-        Option("Desktop-Widgets", s.ShowWidgets, v => { s.ShowWidgets = v; app.ApplyWidgetVisibility(); });
-        Option("Taskleiste einklappen", s.TaskbarAutoHide, v => { s.TaskbarAutoHide = v; app.Taskbar.ApplyAutoHide(); });
-        Option("Mit Windows starten", Settings.Autostart, v => Settings.Autostart = v);
-
-        // Arrange mode for the desktop widgets: the button turns into a blue "Fertig" while it is on.
-        Button arrange = null;
-        void UpdateArrange()
-        {
-            ((TextBlock)((StackPanel)arrange.Content).Children[1]).Text = WidgetMover.Editing ? "Fertig" : "Widgets anordnen";
-            ((TextBlock)((StackPanel)arrange.Content).Children[0]).Text = WidgetMover.Editing ? "" : "";
-            arrange.Background = WidgetMover.Editing ? new SolidColorBrush(Theme.Accent) : new SolidColorBrush(Color.FromArgb(0x1A, 255, 255, 255));
-        }
-        arrange = Pill("", "", () =>
-        {
-            if (!s.ShowWidgets) { s.ShowWidgets = true; s.Save(); app.ApplyWidgetVisibility(); }
-            WidgetMover.SetEditing(!WidgetMover.Editing);
-            UpdateArrange();
-        });
-        arrange.HorizontalAlignment = HorizontalAlignment.Left;
-        arrange.VerticalAlignment = VerticalAlignment.Center;
-        UpdateArrange();
-        grid.Children.Add(arrange);
-
-        var design = Pill("Design", "", () => app.Flyout.Toggle(FlyoutKind.Design));
-        design.HorizontalAlignment = HorizontalAlignment.Left;
-        design.VerticalAlignment = VerticalAlignment.Center;
-        grid.Children.Add(design);
-        if (SystemMonitor.CpuTempProblem != null)
-        {
-            var admin = Pill(SystemMonitor.IsElevated ? "CPU-Treiber installieren" : "Als Admin starten", "", app.FixCpuTemp);
-            admin.ToolTip = "Wird für die CPU-Temperatur benötigt";
-            admin.Margin = new Thickness(0, 0, 6, 0);
-            right.Children.Insert(0, admin);
-        }
-        _updatePill = null;
-        if (UpdateService.Available != null)
-        {
-            _updatePill = Pill("", "", app.InstallUpdate);
-            _updatePill.Margin = new Thickness(0, 0, 6, 0);
-            _updatePill.Background = new SolidColorBrush(Theme.Accent);
-            right.Children.Insert(0, _updatePill);
-            ShowUpdateState();
-        }
-        SettingsView.Children.Add(grid);
-
-        var colors = ColorRow();
-        Grid.SetRow(colors, 2);
-        SettingsView.Children.Add(colors);
-    }
-
-    private int _colorTarget; // 0 = island, 1 = taskbar, 2 = widgets
-
-    // Dark tones for the backgrounds (text stays readable on all of them), light tones for the widget text.
-    // Few neutral, high-contrast tones. Backgrounds stay dark so the white text on them remains readable.
-    private static readonly string[] BgColors = { "#050506", "#0B1A36", "#1E1F23", "#383A40" };      // black, dark blue, anthracite, grey
-    private static readonly string[] TextColors = { "#FFFFFF", "#B9BCC4", "#7FA6F0", "#0A0A0C" };    // white, grey, blue, black
-    private static readonly Brush SwatchSelected = Brushes.White;
-    private static readonly Brush SwatchNormal = new SolidColorBrush(Color.FromArgb(0x40, 255, 255, 255));
-
-    /// <summary>One compact row: pick what to color (Island / Leiste / Widgets) on the left, the color on the right.</summary>
-    private FrameworkElement ColorRow()
-    {
-        var s = Settings.Current;
-        var app = (App)Application.Current;
-        var row = new Grid { Height = 28, Margin = new Thickness(0, 2, 0, 0) };
-        var targets = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        var swatches = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
-        row.Children.Add(targets);
-        row.Children.Add(swatches);
-
-        string Current() => _colorTarget switch { 0 => s.IslandColor, 1 => s.TaskbarColor, _ => s.WidgetColor };
-        void Pick(string hex)
-        {
-            if (_colorTarget == 0) { s.IslandColor = hex; ApplyColor(); }
-            else if (_colorTarget == 1) { s.TaskbarColor = hex; app.Taskbar.ApplyLook(); }
-            else { s.WidgetColor = hex; app.ApplyWidgetLook(); }
-            s.Save();
-        }
-
-        void FillSwatches()
-        {
-            swatches.Children.Clear();
-            foreach (var hex in _colorTarget == 2 ? TextColors : BgColors)
-            {
-                var sw = new Border
-                {
-                    Width = 18, Height = 18, CornerRadius = new CornerRadius(9), Margin = new Thickness(6, 0, 0, 0), Cursor = Cursors.Hand, Tag = hex,
-                    Background = new SolidColorBrush(Settings.ToColor(hex, 0xFF, Colors.Black)), BorderThickness = new Thickness(2),
-                    BorderBrush = string.Equals(hex, Current(), StringComparison.OrdinalIgnoreCase) ? SwatchSelected : SwatchNormal,
-                };
-                sw.MouseLeftButtonUp += (_, e) =>
-                {
-                    foreach (Border b in swatches.Children) b.BorderBrush = (string)b.Tag == hex ? SwatchSelected : SwatchNormal;
-                    Pick(hex);
-                    e.Handled = true;
-                };
-                swatches.Children.Add(sw);
-            }
-        }
-
-        var chipOn = new SolidColorBrush(Color.FromArgb(0x30, 255, 255, 255));
-        string[] names = { "Island", "Leiste", "Widgets" };
-        for (int i = 0; i < names.Length; i++)
-        {
-            int index = i;
-            var chip = new Border
-            {
-                CornerRadius = new CornerRadius(9), Padding = new Thickness(9, 3, 9, 3), Margin = new Thickness(0, 0, 4, 0), Cursor = Cursors.Hand,
-                Background = i == _colorTarget ? chipOn : Brushes.Transparent,
-                Child = new TextBlock { Text = names[i], FontSize = 11, FontWeight = FontWeights.SemiBold },
-            };
-            chip.MouseLeftButtonUp += (_, e) =>
-            {
-                _colorTarget = index;
-                foreach (Border c in targets.Children) c.Background = c == chip ? chipOn : Brushes.Transparent;
-                FillSwatches();
-                e.Handled = true;
-            };
-            targets.Children.Add(chip);
-        }
-        FillSwatches();
-        return row;
-    }
+    private void Settings_Click(object sender, RoutedEventArgs e) => ((App)Application.Current).OpenSettings();
 
     private void ApplyColor()
     {
@@ -303,30 +129,12 @@ public partial class IslandWindow : Window
         ApplyGlow();
     }
 
-    private Button _updatePill;
-
-    /// <summary>A new version turns the gear blue; the button in the settings shows the version or the download progress.</summary>
-    private void ShowUpdateState()
-    {
-        GearBtn.Foreground = UpdateService.Available != null ? new SolidColorBrush(Theme.Accent) : Brushes.White;
-        if (_updatePill == null) return;
-        ((TextBlock)((StackPanel)_updatePill.Content).Children[1]).Text =
-            UpdateService.Progress is { } p ? $"Lädt {p} %" : $"Update auf {UpdateService.Available}";
-        _updatePill.IsEnabled = UpdateService.Progress == null;
-    }
-
-    private Button Pill(string text, string glyph, Action onClick)
-    {
-        var content = new StackPanel { Orientation = Orientation.Horizontal };
-        content.Children.Add(new TextBlock { Text = glyph, FontFamily = (FontFamily)FindResource("Icons"), FontSize = 11, VerticalAlignment = VerticalAlignment.Center });
-        content.Children.Add(new TextBlock { Text = text, FontFamily = (FontFamily)FindResource("Ui"), FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
-        var b = new Button { Style = (Style)FindResource("IconButton"), Content = content, Padding = new Thickness(10, 5, 10, 5), Background = new SolidColorBrush(Color.FromArgb(0x1A, 255, 255, 255)) };
-        b.Click += (_, _) => onClick();
-        return b;
-    }
-
+    /// <summary>A new version turns the gear blue.</summary>
     private static void Animate(IAnimatable el, DependencyProperty prop, double to, TimeSpan dur, IEasingFunction ease, double delayMs = 0) =>
         el.BeginAnimation(prop, new DoubleAnimation(to, dur) { EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(delayMs) });
+
+    private void ShowUpdateState() =>
+        GearBtn.Foreground = UpdateService.Available != null ? Theme.AccentBrush : Brushes.White;
 
     private void Island_MouseEnter(object sender, MouseEventArgs e)
     {
@@ -415,17 +223,6 @@ public partial class IslandWindow : Window
         DurText.Text = MediaService.Fmt(dur);
     }
 
-    private void UpdateStats()
-    {
-        CpuText.Text = $"{_sys.Cpu:0}%";
-        CpuBar.Value = _sys.Cpu / 100;
-        RamText.Text = $"{_sys.RamUsedGB:0.0} / {_sys.RamTotalGB:0.0} GB";
-        RamBar.Value = _sys.RamTotalGB > 0 ? _sys.RamUsedGB / _sys.RamTotalGB : 0;
-        DownText.Text = SystemMonitor.Rate(_sys.DownBps);
-        UpText.Text = SystemMonitor.Rate(_sys.UpBps);
-        CheckHeat();
-    }
-
     private void FastTick()
     {
         _tick++;
@@ -455,39 +252,20 @@ public partial class IslandWindow : Window
     private void Art_Click(object sender, MouseButtonEventArgs e) => _media.PlayPause();
     private void Mute_Click(object sender, RoutedEventArgs e) { Volume.ToggleMute(); VolSlider.Refresh(); }
 
-    // ---------- settings (right click) ----------
+    // ---------- right click ----------
 
     private void Island_RightClick(object sender, MouseButtonEventArgs e)
     {
-        var s = Settings.Current;
         var app = (App)Application.Current;
         var menu = new ContextMenu { PlacementTarget = Island, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
-
-        void Toggle(string header, bool isChecked, Action<bool> onChange)
-        {
-            var item = new MenuItem { Header = header, IsCheckable = true, IsChecked = isChecked };
-            item.Click += (_, _) => { onChange(item.IsChecked); s.Save(); };
-            menu.Items.Add(item);
-        }
-
-        Toggle("Island immer ausgeklappt", s.AlwaysExpanded, v => { s.AlwaysExpanded = v; SetExpanded(v || _hovering); });
-        Toggle("Desktop-Widgets anzeigen", s.ShowWidgets, v => { s.ShowWidgets = v; app.ApplyWidgetVisibility(); });
-        Toggle("Taskleiste automatisch einklappen", s.TaskbarAutoHide, v => { s.TaskbarAutoHide = v; app.Taskbar.ApplyAutoHide(); });
-        Toggle("Mit Windows starten", Settings.Autostart, v => Settings.Autostart = v);
-        Toggle("Speicher sparen (nach Neustart von Onyx)", s.SaveMemory, v => s.SaveMemory = v);
-        if (SystemMonitor.CpuTempProblem != null)
-        {
-            var admin = new MenuItem { Header = SystemMonitor.IsElevated ? "Treiber für CPU-Temperatur installieren" : "Als Administrator neu starten (CPU-Temperatur)", Icon = "" };
-            admin.Click += (_, _) => app.FixCpuTemp();
-            menu.Items.Add(admin);
-        }
-        menu.Items.Add(new Separator());
-        var quit = new MenuItem { Header = "Beenden", Icon = "" };
+        var settings = new MenuItem { Header = "Einstellungen", Icon = "E713" };
+        settings.Click += (_, _) => app.OpenSettings();
+        menu.Items.Add(settings);
+        var quit = new MenuItem { Header = "Beenden", Icon = "E7E8" };
         quit.Click += (_, _) => app.Quit();
         menu.Items.Add(quit);
-
         _menuOpen = true;
-        menu.Closed += (_, _) => { _menuOpen = false; if (!_hovering && !s.AlwaysExpanded) SetExpanded(false); };
+        menu.Closed += (_, _) => { _menuOpen = false; if (!_hovering && !Settings.Current.AlwaysExpanded) SetExpanded(false); };
         menu.IsOpen = true;
         e.Handled = true;
     }
