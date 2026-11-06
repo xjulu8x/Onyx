@@ -82,7 +82,8 @@ public partial class FlyoutWindow : Window
         _closing = true;
         _closedAt = DateTime.Now;
         var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(130));
-        fade.Completed += (_, _) => { if (_closing) { Hide(); _closing = false; } };
+        // The content is rebuilt on every open, so nothing has to stay in memory while closed.
+        fade.Completed += (_, _) => { if (_closing) { Hide(); _closing = false; Host.Content = null; } };
         Panel.BeginAnimation(OpacityProperty, fade);
         Slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(16, TimeSpan.FromMilliseconds(130)));
     }

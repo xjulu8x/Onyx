@@ -14,6 +14,8 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        // Drawing without the GPU saves about 45 MB, but animations may be less smooth, so it is opt-in. Must be set before any window exists.
+        if (Settings.Current.SaveMemory) System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
         System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance); // netsh prints in the OEM code page
 
         // Test aid: "--autostart on|off" runs the same code as the "Mit Windows starten" switch and exits.

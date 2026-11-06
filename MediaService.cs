@@ -95,6 +95,7 @@ public class MediaService
             var bmp = new BitmapImage();
             bmp.BeginInit();
             bmp.CacheOption = BitmapCacheOption.OnLoad;
+            bmp.DecodePixelWidth = 256; // shown at about 100 px; full-size covers would only cost memory
             bmp.StreamSource = ms;
             bmp.EndInit();
             bmp.Freeze();

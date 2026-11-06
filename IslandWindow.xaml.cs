@@ -380,6 +380,7 @@ public partial class IslandWindow : Window
         Toggle("Desktop-Widgets anzeigen", s.ShowWidgets, v => { s.ShowWidgets = v; app.ApplyWidgetVisibility(); });
         Toggle("Taskleiste automatisch einklappen", s.TaskbarAutoHide, v => { s.TaskbarAutoHide = v; app.Taskbar.ApplyAutoHide(); });
         Toggle("Mit Windows starten", Settings.Autostart, v => Settings.Autostart = v);
+        Toggle("Speicher sparen (nach Neustart von Onyx)", s.SaveMemory, v => s.SaveMemory = v);
         if (SystemMonitor.CpuTempProblem != null)
         {
             var admin = new MenuItem { Header = SystemMonitor.IsElevated ? "Treiber für CPU-Temperatur installieren" : "Als Administrator neu starten (CPU-Temperatur)", Icon = "" };

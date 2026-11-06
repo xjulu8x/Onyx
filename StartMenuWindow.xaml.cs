@@ -69,7 +69,8 @@ public partial class StartMenuWindow : Window
         if (!IsVisible || _closing) return;
         _closing = true;
         var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(140));
-        fade.Completed += (_, _) => { if (_closing) { Hide(); _closing = false; } };
+        // The rows are rebuilt on every open, so they don't have to stay in memory while closed.
+        fade.Completed += (_, _) => { if (_closing) { Hide(); _closing = false; Sections.Children.Clear(); } };
         Panel.BeginAnimation(OpacityProperty, fade);
         Slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(20, TimeSpan.FromMilliseconds(140)));
     }

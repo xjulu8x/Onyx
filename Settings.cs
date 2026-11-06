@@ -11,6 +11,7 @@ public class Settings
     /// <summary>0 = opaque, 1 = fully see-through (the bar is capped so it never disappears completely).</summary>
     public double? TaskbarTransparency { get; set; }
     public bool TaskbarAutoHide { get; set; }
+    public bool SaveMemory { get; set; }
 
     [System.Text.Json.Serialization.JsonIgnore]
     public double Transparency => TaskbarTransparency ?? (TransparentTaskbar ? 0.12 : 0.02);
