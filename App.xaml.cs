@@ -25,6 +25,9 @@ public partial class App : Application
             Shutdown();
             return;
         }
+        // Test aid: "--update-now [sha256]" runs the update against the real release (optionally with a wrong checksum) and exits.
+        var update = Array.IndexOf(e.Args, "--update-now");
+        if (update >= 0) { TestUpdate(update + 1 < e.Args.Length ? e.Args[update + 1] : null); return; }
         _single = new Mutex(false, "Onyx.SingleInstance");
         bool owned;
         // "--wait": started by RestartElevated, so give the old instance a moment to exit.
@@ -55,6 +58,7 @@ public partial class App : Application
         ApplyWidgetColor();
         TaskbarHider.Start();
         Task.Run(Settings.MigrateAndRepair);
+        UpdateService.Start();
 
         if (e.Args.Contains("--probe")) Probe();
         var snap = Array.IndexOf(e.Args, "--snapshot");
@@ -70,6 +74,22 @@ public partial class App : Application
             Quit();
         }
         catch { /* UAC prompt cancelled */ }
+    }
+
+    /// <summary>Installs the update found by <see cref="UpdateService"/> and restarts into the new version.</summary>
+    public async void InstallUpdate()
+    {
+        if (!await UpdateService.InstallAsync()) return;
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!, "--wait") { UseShellExecute = false });
+        Quit();
+    }
+
+    private async void TestUpdate(string sha256)
+    {
+        await UpdateService.CheckAsync();
+        bool installed = await UpdateService.InstallAsync(sha256);
+        System.IO.File.WriteAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "onyx_update.txt"), $"available={UpdateService.Available} installed={installed}");
+        Shutdown();
     }
 
     /// <summary>Fixes whatever keeps the CPU temperature from showing: admin rights first, then the sensor driver.</summary>

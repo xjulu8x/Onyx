@@ -54,6 +54,10 @@ Danach erscheint die Temperatur von selbst.
 Island aufklappen → **Zahnrad** → **„Mit Windows starten“** einschalten.
 Läuft Onyx dabei als Admin, startet es später automatisch mit Adminrechten (ohne Nachfrage), damit die Temperatur funktioniert.
 
+### ⬆️ Updates
+
+Onyx prüft selbst, ob es eine neue Version gibt. Dann wird das **Zahnrad in der Island blau**: Zahnrad → **„Update auf x.y.z“** klicken, den Rest erledigt Onyx. Die Datei wird vor dem Austausch geprüft, und die Einstellungen bleiben erhalten.
+
 ---
 
 ## 🧭 Bedienung

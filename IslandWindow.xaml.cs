@@ -52,6 +52,7 @@ public partial class IslandWindow : Window
         fast.Tick += (_, _) => FastTick();
         fast.Start();
 
+        UpdateService.Changed += () => Dispatcher.BeginInvoke(ShowUpdateState);
         ApplyColor();
         if (Settings.Current.AlwaysExpanded) SetExpanded(true, animate: false);
         UpdateMedia();
@@ -163,6 +164,15 @@ public partial class IslandWindow : Window
             admin.Margin = new Thickness(0, 0, 6, 0);
             right.Children.Insert(0, admin);
         }
+        _updatePill = null;
+        if (UpdateService.Available != null)
+        {
+            _updatePill = Pill("", "", app.InstallUpdate);
+            _updatePill.Margin = new Thickness(0, 0, 6, 0);
+            _updatePill.Background = new SolidColorBrush(Color.FromRgb(0x2B, 0x8C, 0xFF));
+            right.Children.Insert(0, _updatePill);
+            ShowUpdateState();
+        }
         SettingsView.Children.Add(grid);
 
         var colors = ColorRow();
@@ -246,6 +256,18 @@ public partial class IslandWindow : Window
 
     private void ApplyColor() =>
         Island.Background = new SolidColorBrush(Settings.ToColor(Settings.Current.IslandColor, 0xF7, Color.FromRgb(0x06, 0x06, 0x08)));
+
+    private Button _updatePill;
+
+    /// <summary>A new version turns the gear blue; the button in the settings shows the version or the download progress.</summary>
+    private void ShowUpdateState()
+    {
+        GearBtn.Foreground = UpdateService.Available != null ? new SolidColorBrush(Color.FromRgb(0x2B, 0x8C, 0xFF)) : Brushes.White;
+        if (_updatePill == null) return;
+        ((TextBlock)((StackPanel)_updatePill.Content).Children[1]).Text =
+            UpdateService.Progress is { } p ? $"Lädt {p} %" : $"Update auf {UpdateService.Available}";
+        _updatePill.IsEnabled = UpdateService.Progress == null;
+    }
 
     private Button Pill(string text, string glyph, Action onClick)
     {
