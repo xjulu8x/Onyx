@@ -9,17 +9,19 @@ namespace DesktopOverlay;
 
 public partial class IslandWindow : Window
 {
-    private const double CompactW = 240, CompactH = 34, ExpandedW = 480, ExpandedH = 160;
+    private const double ExpandedW = 480, ExpandedH = 160;
+    private static bool Capsule => Settings.Current.IslandShape == 2;
+    private static double CompactW => Capsule ? 180 : 240;
+    private static double CompactH => Capsule ? 40 : 34;
+    private static double CompactRadius => CompactH / 2;
     private static readonly IEasingFunction Ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-    // Opening gets a gentle spring overshoot, closing a soft ease-in-out, so neither feels abrupt.
-    private static readonly IEasingFunction OpenEase = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.18 };
     // Closing starts quickly and settles softly (ease-out), so it feels responsive without snapping shut.
     private static readonly IEasingFunction CloseEase = new QuarticEase { EasingMode = EasingMode.EaseOut };
     private static readonly IEasingFunction FadeEase = new QuadraticEase { EasingMode = EasingMode.EaseOut };
 
     public static readonly DependencyProperty RadiusProperty = DependencyProperty.Register(
         nameof(Radius), typeof(double), typeof(IslandWindow),
-        new PropertyMetadata(17.0, (d, e) => ((IslandWindow)d).Island.CornerRadius = new CornerRadius((double)e.NewValue)));
+        new PropertyMetadata(17.0, (d, e) => ((IslandWindow)d).SetCorners((double)e.NewValue)));
 
     public double Radius { get => (double)GetValue(RadiusProperty); set => SetValue(RadiusProperty, value); }
 
@@ -66,13 +68,13 @@ public partial class IslandWindow : Window
     private void SetExpanded(bool expand, bool animate = true)
     {
         _expanded = expand;
-        double k = animate ? Theme.Speed : 0;
+        double k = animate ? Theme.Speed * Theme.MotionLength : 0;
         var size = TimeSpan.FromMilliseconds((expand ? 460 : 300) * k);
-        var ease = expand ? OpenEase : CloseEase;
+        var ease = expand ? Theme.OpenEase : CloseEase;
 
         Animate(Island, WidthProperty, expand ? ExpandedW : CompactW, size, ease);
         Animate(Island, HeightProperty, expand ? ExpandedH : CompactH, size, ease);
-        Animate(this, RadiusProperty, (expand ? 28 : 17) * Settings.Current.IslandCorners, size, ease);
+        Animate(this, RadiusProperty, (expand ? 28 : CompactRadius) * Settings.Current.IslandCorners, size, ease);
 
         // The content sits at its final position from the start and is revealed by the growing island (clipped),
         // with only a short fade. No per-frame scaling: that re-renders the whole transparent window and stutters.
@@ -267,17 +269,35 @@ public partial class IslandWindow : Window
         Island.BorderThickness = new Thickness(width);
     }
 
+    private void SetCorners(double r) =>
+        Island.CornerRadius = Settings.Current.IslandShape == 1 ? new CornerRadius(0, 0, r, r) : new CornerRadius(r);
+
     /// <summary>Color, size and rounding from the design settings. The scale is static, so the expand animation stays as cheap as before.</summary>
     public void ApplyLook()
     {
         var s = Settings.Current;
         ApplyColor();
+        // Form: 0 floating, 1 docked to the top edge, 2 capsule (narrower and taller, round cover)
+        bool docked = s.IslandShape == 1;
+        Island.Margin = new Thickness(0, docked ? 0 : 8, 0, 0);
+        EarLeft.Visibility = EarRight.Visibility = docked ? Visibility.Visible : Visibility.Collapsed;
+        EarLeft.Fill = EarRight.Fill = Island.Background;
+        Compact.Height = CompactH;
+        CompactArt.Width = CompactArt.Height = Capsule ? 28 : 22;
+        CompactArt.CornerRadius = new CornerRadius(Capsule ? 14 : 6);
+        if (!_expanded)
+        {
+            Island.BeginAnimation(WidthProperty, null);
+            Island.BeginAnimation(HeightProperty, null);
+            Island.Width = CompactW;
+            Island.Height = CompactH;
+        }
         IslandRoot.LayoutTransform = new ScaleTransform(s.IslandScale, s.IslandScale);
         Width = 560 * s.IslandScale;
         Height = 210 * s.IslandScale;
         Left = (SystemParameters.PrimaryScreenWidth - Width) / 2;
         BeginAnimation(RadiusProperty, null);
-        Radius = (_expanded ? 28 : 17) * s.IslandCorners;
+        Radius = (_expanded ? 28 : CompactRadius) * s.IslandCorners;
     }
 
     private Button _updatePill;

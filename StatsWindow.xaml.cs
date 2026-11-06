@@ -26,7 +26,7 @@ public partial class StatsWindow : Window
         var c = Foreground is SolidColorBrush b ? b.Color : Colors.White;
         // Flat look: just the CPU line (no shaded area below it) and a solid RAM bar.
         CpuFill.Fill = null;
-        RamFill.Background = new SolidColorBrush(c);
+        RamFill.Background = CpuBarFill.Background = new SolidColorBrush(c);
         foreach (var bar in DiskList.Children.OfType<Grid>().SelectMany(g => g.Children.OfType<ProgressBar>())) bar.Foreground = Foreground;
     }
 
@@ -38,9 +38,94 @@ public partial class StatsWindow : Window
         GpuTemp.Text = $"{_sys.GpuTemp ?? 0:0}°";
         CpuVal.Text = $"{_sys.Cpu:0.0} %";
         RamVal.Text = $"{_sys.RamUsedGB:0.0} GB/{_sys.RamTotalGB:0.0} GB";
-        RamFill.Width = _sys.RamTotalGB > 0 ? RamTrack.ActualWidth * _sys.RamUsedGB / _sys.RamTotalGB : 0;
-        DrawCpu();
+        double ram = _sys.RamTotalGB > 0 ? _sys.RamUsedGB / _sys.RamTotalGB : 0, cpu = _sys.Cpu / 100;
+        int style = Settings.Current.WidgetGraph; // 0 line, 1 bars, 2 rings
+        CpuCanvas.Visibility = style == 0 ? Visibility.Visible : Visibility.Collapsed;
+        CpuTrack.Visibility = style == 1 ? Visibility.Visible : Visibility.Collapsed;
+        CpuRingBox.Visibility = RamRingBox.Visibility = style == 2 ? Visibility.Visible : Visibility.Collapsed;
+        RamTrack.Visibility = style == 2 ? Visibility.Collapsed : Visibility.Visible;
+        RamFill.Width = RamTrack.ActualWidth * ram;
+        if (style == 0) DrawCpu();
+        if (style == 1) CpuBarFill.Width = CpuTrack.ActualWidth * cpu;
+        if (style == 2)
+        {
+            CpuRing.Data = Arc(cpu, 64);
+            RamRing.Data = Arc(ram, 64);
+        }
         DrawDisks();
+    }
+
+    /// <summary>Clockwise arc from the top of a ring, for the given share of the circle.</summary>
+    private static Geometry Arc(double share, double size)
+    {
+        double r = size / 2 - 3, c = size / 2, angle = Math.Clamp(share, 0.001, 0.999) * 2 * Math.PI;
+        var geometry = new StreamGeometry();
+        using (var g = geometry.Open())
+        {
+            g.BeginFigure(new Point(c, c - r), false, false);
+            g.ArcTo(new Point(c + r * Math.Sin(angle), c - r * Math.Cos(angle)), new Size(r, r), 0, angle > Math.PI, SweepDirection.Clockwise, true, false);
+        }
+        geometry.Freeze();
+        return geometry;
+    }
+
+    // ---------- single widgets ----------
+
+    private readonly List<Window> _parts = new();
+
+    /// <summary>The separate widgets while "Einzeln" is on; otherwise empty.</summary>
+    public IReadOnlyList<Window> Parts => _parts;
+
+    /// <summary>Moves the blocks into their own small windows, which can be placed one by one, or back into this one.</summary>
+    public void ApplyLayout()
+    {
+        bool free = Settings.Current.WidgetsFree;
+        if (free == _parts.Count > 0) return;
+        var blocks = new (FrameworkElement Block, string Key, Thickness Margin)[]
+        {
+            (Net, "Net", new Thickness(10, 0, 0, 0)), (GpuBlock, "Gpu", new Thickness(0, 40, 0, 16)), (CpuBlock, "Cpu", new Thickness(0)),
+            (RamBlock, "Ram", new Thickness(0, 18, 0, 0)), (DiskList, "Disks", new Thickness(0, 18, 0, 0)),
+        };
+        if (!free)
+        {
+            foreach (var part in _parts)
+            {
+                WidgetMover.Detach(part);
+                ((Border)part.Content).Child = null;
+                part.Close();
+            }
+            _parts.Clear();
+            foreach (var (block, _, margin) in blocks)
+            {
+                block.Margin = margin;
+                block.Effect = null;
+                Blocks.Children.Add(block);
+            }
+            return;
+        }
+
+        Hide();
+        double width = 250 * Settings.Current.WidgetScale, left = SystemParameters.PrimaryScreenWidth - width - 16, y = 14;
+        foreach (var (block, key, _) in blocks)
+        {
+            Blocks.Children.Remove(block);
+            block.Margin = new Thickness(0);
+            block.Effect = (System.Windows.Media.Effects.Effect)FindResource("TextShadow");
+            var part = new Window
+            {
+                Title = "Stats-" + key, Tag = "wide", Width = width, SizeToContent = SizeToContent.Height, Left = left, Top = y,
+                WindowStyle = WindowStyle.None, AllowsTransparency = true, Background = Brushes.Transparent, ShowInTaskbar = false, ResizeMode = ResizeMode.NoResize,
+                Foreground = Foreground, Content = new Border { Padding = new Thickness(10), Child = block },
+            };
+            part.SetResourceReference(FontFamilyProperty, "Ui");
+            TextOptions.SetTextRenderingMode(part, TextRenderingMode.Grayscale);
+            Native.MakeOverlay(part, desktopLevel: true);
+            WidgetMover.Attach(part, part.Title);
+            _parts.Add(part);
+            part.Show();
+            part.UpdateLayout();
+            y += part.ActualHeight;
+        }
     }
 
     private void DrawCpu()

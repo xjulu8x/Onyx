@@ -6,7 +6,7 @@
         ShowInTaskbar="False" ResizeMode="NoResize"
         FontFamily="{DynamicResource Ui}" Foreground="White"
         TextOptions.TextFormattingMode="Ideal" TextOptions.TextRenderingMode="Grayscale">
-    <StackPanel Effect="{StaticResource TextShadow}" Margin="10">
+    <StackPanel x:Name="Blocks" Effect="{StaticResource TextShadow}" Margin="10">
         <!-- Network -->
         <Grid x:Name="Net" Margin="10,0,0,0">
             <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -23,7 +23,7 @@
 
         <!-- GPU temperature -->
         <!-- Fixed column widths so nothing shifts when the number of digits changes. -->
-        <Grid HorizontalAlignment="Center" Margin="0,40,0,16">
+        <Grid x:Name="GpuBlock" HorizontalAlignment="Center" Margin="0,40,0,16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="44"/>
                 <ColumnDefinition Width="80"/>
@@ -43,6 +43,7 @@
         </Grid>
 
         <!-- CPU graph -->
+        <StackPanel x:Name="CpuBlock">
         <Grid>
             <TextBlock Text="CPU" FontSize="14"/>
             <TextBlock x:Name="CpuVal" FontSize="12" HorizontalAlignment="Right" VerticalAlignment="Center"/>
@@ -58,9 +59,19 @@
             </Path>
             <Path x:Name="CpuLine" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Window}}" StrokeThickness="1.4" StrokeLineJoin="Round"/>
         </Canvas>
+        <Grid x:Name="CpuTrack" Height="10" Margin="0,8,0,0" Visibility="Collapsed">
+            <Border Background="#1AFFFFFF" CornerRadius="2"/>
+            <Border x:Name="CpuBarFill" CornerRadius="2" HorizontalAlignment="Left" Width="0"/>
+        </Grid>
+        <Grid x:Name="CpuRingBox" Width="64" Height="64" Margin="0,8,0,0" HorizontalAlignment="Left" Visibility="Collapsed">
+            <Ellipse Stroke="#1AFFFFFF" StrokeThickness="6"/>
+            <Path x:Name="CpuRing" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Window}}" StrokeThickness="6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+        </Grid>
+        </StackPanel>
 
         <!-- RAM -->
-        <Grid Margin="0,18,0,0">
+        <StackPanel x:Name="RamBlock" Margin="0,18,0,0">
+        <Grid>
             <TextBlock Text="RAM" FontSize="14"/>
             <TextBlock x:Name="RamVal" FontSize="12" HorizontalAlignment="Right" VerticalAlignment="Center"/>
         </Grid>
@@ -75,6 +86,11 @@
                 </Border.Background>
             </Border>
         </Grid>
+        <Grid x:Name="RamRingBox" Width="64" Height="64" Margin="0,8,0,0" HorizontalAlignment="Left" Visibility="Collapsed">
+            <Ellipse Stroke="#1AFFFFFF" StrokeThickness="6"/>
+            <Path x:Name="RamRing" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Window}}" StrokeThickness="6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+        </Grid>
+        </StackPanel>
 
         <!-- Disks -->
         <StackPanel x:Name="DiskList" Margin="0,18,0,0"/>

@@ -1,5 +1,9 @@
+using System.IO;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Threading;
 
 namespace DesktopOverlay;
 
@@ -79,8 +83,8 @@ internal static class Theme
         {
             var rotate = new RotateTransform(0, 0.5, 0.5);
             _lightRun = new LinearGradientBrush { StartPoint = new Point(0, 0.5), EndPoint = new Point(1, 0.5), RelativeTransform = rotate };
-            var spin = new System.Windows.Media.Animation.DoubleAnimation(0, 360, TimeSpan.FromSeconds(9)) { RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever };
-            System.Windows.Media.Animation.Timeline.SetDesiredFrameRate(spin, 12);
+            var spin = new DoubleAnimation(0, 360, TimeSpan.FromSeconds(9)) { RepeatBehavior = RepeatBehavior.Forever };
+            Timeline.SetDesiredFrameRate(spin, 12);
             rotate.BeginAnimation(RotateTransform.AngleProperty, spin);
         }
         _lightRun.GradientStops.Clear();
@@ -113,5 +117,110 @@ internal static class Theme
         s.TaskbarTransparency = p.Transparency;
         s.Save();
         ApplyAll();
+    }
+
+    // ---------- motion ----------
+
+    /// <summary>Opening curve of the island: soft, springy or direct.</summary>
+    public static IEasingFunction OpenEase => Settings.Current.MotionStyle switch
+    {
+        1 => new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.55 },
+        2 => new CubicEase { EasingMode = EasingMode.EaseOut },
+        _ => new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.18 },
+    };
+
+    public static double MotionLength => Settings.Current.MotionStyle switch { 1 => 1.15, 2 => 0.6, _ => 1 };
+
+    // ---------- own themes ----------
+
+    // Everything a theme carries, with the allowed range of the numbers: theme files come from other people.
+    private static readonly Dictionary<string, (double Min, double Max)> DesignKeys = new()
+    {
+        ["IslandColor"] = default, ["TaskbarColor"] = default, ["WidgetColor"] = default, ["AccentColor"] = default, ["FontFamily"] = default,
+        ["TaskbarAppsLeft"] = default, ["Grain"] = default,
+        ["AnimationSpeed"] = (0, 2), ["TaskbarTransparency"] = (0, 1), ["TaskbarHeight"] = (38, 64), ["TaskbarIconSize"] = (18, 32),
+        ["TaskbarRadius"] = (0, 25), ["IslandScale"] = (0.8, 1.2), ["IslandCorners"] = (0.2, 1), ["IslandOpacity"] = (0.4, 1),
+        ["WidgetScale"] = (0.7, 1.3), ["WidgetOpacity"] = (0.3, 1), ["TaskbarShape"] = (0, 2), ["IconTint"] = (0, 3),
+        ["IndicatorStyle"] = (0, 3), ["RimStyle"] = (0, 3), ["ClockStyle"] = (0, 2), ["IslandShape"] = (0, 2), ["MotionStyle"] = (0, 2), ["WidgetGraph"] = (0, 2),
+    };
+
+    /// <summary>All theme names: the built-in ones, then the user's own.</summary>
+    public static List<string> Names() => Presets.Select(p => p.Name).Concat(Settings.Current.CustomThemes.Keys).ToList();
+
+    public static void Use(string name)
+    {
+        int preset = Array.FindIndex(Presets, p => p.Name == name);
+        if (preset >= 0) UsePreset(preset);
+        else if (Settings.Current.CustomThemes.TryGetValue(name, out var values)) { Load(values); Settings.Current.Save(); ApplyAll(); }
+    }
+
+    public static void SaveCurrent(string name)
+    {
+        var values = new Dictionary<string, JsonElement>();
+        foreach (var key in DesignKeys.Keys)
+            values[key] = JsonSerializer.SerializeToElement(typeof(Settings).GetProperty(key)!.GetValue(Settings.Current));
+        Settings.Current.CustomThemes[name] = values;
+        Settings.Current.Save();
+    }
+
+    private static void Load(Dictionary<string, JsonElement> values)
+    {
+        foreach (var (key, value) in values)
+        {
+            if (!DesignKeys.TryGetValue(key, out var range)) continue; // unknown entries in a file are ignored
+            var property = typeof(Settings).GetProperty(key)!;
+            try
+            {
+                var parsed = value.Deserialize(property.PropertyType);
+                if (parsed == null) continue;
+                if (parsed is double d) parsed = Math.Clamp(d, range.Min, range.Max);
+                if (parsed is int i) parsed = (int)Math.Clamp(i, range.Min, range.Max);
+                if (key.EndsWith("Color") && parsed is string hex && !System.Text.RegularExpressions.Regex.IsMatch(hex, "^#[0-9A-Fa-f]{6}$")) continue;
+                property.SetValue(Settings.Current, parsed);
+            }
+            catch (JsonException) { }
+        }
+    }
+
+    public static void Export(string name, string file) =>
+        File.WriteAllText(file, JsonSerializer.Serialize(Settings.Current.CustomThemes[name], new JsonSerializerOptions { WriteIndented = true }));
+
+    /// <summary>Adds a theme file to the own themes and returns its name, or null when the file is not a theme.</summary>
+    public static string Import(string file)
+    {
+        try
+        {
+            var values = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(File.ReadAllText(file));
+            if (values == null || !values.Keys.Any(DesignKeys.ContainsKey)) return null;
+            var name = Path.GetFileNameWithoutExtension(file);
+            Settings.Current.CustomThemes[name] = values;
+            Settings.Current.Save();
+            return name;
+        }
+        catch { return null; }
+    }
+
+    // ---------- time of day ----------
+
+    private static DispatcherTimer _clock;
+    private static bool? _wasDay;
+
+    /// <summary>Switches between the day and night theme at 7:00 and 19:00. The check runs once a minute.</summary>
+    public static void StartAutoTheme()
+    {
+        _clock = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
+        _clock.Tick += (_, _) => CheckTimeOfDay();
+        _clock.Start();
+        CheckTimeOfDay();
+    }
+
+    public static void CheckTimeOfDay(bool force = false)
+    {
+        var s = Settings.Current;
+        if (!s.AutoTheme) { _wasDay = null; return; }
+        bool day = DateTime.Now.Hour is >= 7 and < 19;
+        if (day == _wasDay && !force) return;
+        _wasDay = day;
+        Use(day ? s.DayTheme : s.NightTheme);
     }
 }

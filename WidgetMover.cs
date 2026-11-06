@@ -29,6 +29,8 @@ internal static class WidgetMover
         if (!on) Settings.Current.Save();
     }
 
+    public static void Detach(Window w) => Widgets.RemoveAll(x => x.Window == w);
+
     private static void Remember(Window w, string key)
     {
         if (!double.IsNaN(w.Left) && !double.IsNaN(w.Top)) Settings.Current.WidgetPositions[key] = new[] { Math.Round(w.Left), Math.Round(w.Top) };

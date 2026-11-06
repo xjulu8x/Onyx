@@ -272,14 +272,91 @@ public partial class FlyoutWindow : Window
         taskbar.Children.Add(DesignSlider("Ecken", 0, 25, () => s.TaskbarRadius, v => { s.TaskbarRadius = Math.Round(v); bar.ApplyLook(); }, v => $"{v:0} px"));
 
         var island = Group(root, "Island");
+        Pick("Form", new[] { "Schwebend", "Angedockt", "Kapsel" }, s.IslandShape, i => { s.IslandShape = i; app.Island.ApplyLook(); }, island);
+        Pick("Bewegung", new[] { "Weich", "Federnd", "Direkt" }, s.MotionStyle, i => s.MotionStyle = i, island);
+        island.Children.Add(SectionTitle("Größe"));
         island.Children.Add(DesignSlider("Größe", 0.8, 1.2, () => s.IslandScale, v => { s.IslandScale = Math.Round(v, 2); app.Island.ApplyLook(); }, v => $"{v * 100:0} %"));
         island.Children.Add(DesignSlider("Ecken", 0.2, 1, () => s.IslandCorners, v => { s.IslandCorners = Math.Round(v, 2); app.Island.ApplyLook(); }, v => $"{v * 100:0} %"));
         island.Children.Add(DesignSlider("Deckkraft", 0.4, 1, () => s.IslandOpacity, v => { s.IslandOpacity = Math.Round(v, 2); app.Island.ApplyLook(); }, v => $"{v * 100:0} %"));
 
         var widgets = Group(root, "Widgets");
+        Pick("Anzeige", new[] { "Linie", "Balken", "Ringe" }, s.WidgetGraph, i => s.WidgetGraph = i, widgets);
+        Pick("Anordnung", new[] { "Ein Block", "Einzeln" }, s.WidgetsFree ? 1 : 0, i => { s.WidgetsFree = i == 1; app.ApplyWidgetLayout(); }, widgets);
+        widgets.Children.Add(SectionTitle("Größe"));
         widgets.Children.Add(DesignSlider("Größe", 0.7, 1.3, () => s.WidgetScale, v => { s.WidgetScale = Math.Round(v, 2); app.ApplyWidgetLook(); }, v => $"{v * 100:0} %"));
         widgets.Children.Add(DesignSlider("Deckkraft", 0.3, 1, () => s.WidgetOpacity, v => { s.WidgetOpacity = Math.Round(v, 2); app.ApplyWidgetLook(); }, v => $"{v * 100:0} %"));
+
+        var names = Theme.Names().ToArray();
+        var time = Group(root, "Tageszeit");
+        Pick("Automatisch wechseln (7 und 19 Uhr)", new[] { "Aus", "An" }, s.AutoTheme ? 1 : 0, i => { s.AutoTheme = i == 1; Theme.CheckTimeOfDay(force: true); }, time);
+        Pick("Am Tag", names, Array.IndexOf(names, s.DayTheme), i => { s.DayTheme = names[i]; Theme.CheckTimeOfDay(force: true); }, time);
+        Pick("In der Nacht", names, Array.IndexOf(names, s.NightTheme), i => { s.NightTheme = names[i]; Theme.CheckTimeOfDay(force: true); }, time);
+
+        BuildOwnThemes(Group(root, "Eigene Themes"));
         return root;
+    }
+
+    private void BuildOwnThemes(StackPanel into)
+    {
+        void Reload() => Host.Content = BuildDesign();
+        var filter = "Onyx-Theme (*.onyxtheme)|*.onyxtheme";
+
+        var save = new Grid { Margin = new Thickness(0, 0, 0, 8) };
+        save.ColumnDefinitions.Add(new ColumnDefinition());
+        save.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var name = new TextBox
+        {
+            Text = "Mein Theme", FontSize = 12, Foreground = Brushes.White, CaretBrush = Brushes.White, BorderThickness = new Thickness(0), Padding = new Thickness(8, 5, 8, 5),
+            Background = new SolidColorBrush(Color.FromArgb(0x14, 255, 255, 255)), VerticalContentAlignment = VerticalAlignment.Center,
+        };
+        save.Children.Add(name);
+        var saveBtn = new Button { Style = (Style)FindResource("IconButton"), Content = "", FontSize = 13, Padding = new Thickness(10, 6, 10, 6), Margin = new Thickness(6, 0, 0, 0), ToolTip = "Aktuelles Design speichern" };
+        saveBtn.Click += (_, _) =>
+        {
+            if (string.IsNullOrWhiteSpace(name.Text)) return;
+            Theme.SaveCurrent(name.Text.Trim());
+            Reload();
+        };
+        Grid.SetColumn(saveBtn, 1);
+        save.Children.Add(saveBtn);
+        into.Children.Add(save);
+
+        foreach (var theme in Settings.Current.CustomThemes.Keys.ToList())
+        {
+            var row = new Grid { Margin = new Thickness(0, 0, 0, 2) };
+            row.ColumnDefinitions.Add(new ColumnDefinition());
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var use = new Button { Style = (Style)FindResource("Row"), Content = new TextBlock { Text = theme, FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis }, ToolTip = "Anwenden" };
+            use.Click += (_, _) => { Theme.Use(theme); Reload(); };
+            row.Children.Add(use);
+            var actions = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(4, 0, 0, 0) };
+            var share = new Button { Style = (Style)FindResource("IconButton"), Content = "", FontSize = 12, ToolTip = "Als Datei exportieren" };
+            share.Click += (_, _) =>
+            {
+                var dialog = new Microsoft.Win32.SaveFileDialog { FileName = theme + ".onyxtheme", Filter = filter };
+                if (dialog.ShowDialog() == true) Theme.Export(theme, dialog.FileName);
+            };
+            var delete = new Button { Style = (Style)FindResource("IconButton"), Content = "", FontSize = 12, ToolTip = "Löschen" };
+            delete.Click += (_, _) =>
+            {
+                Settings.Current.CustomThemes.Remove(theme);
+                Settings.Current.Save();
+                Reload();
+            };
+            actions.Children.Add(share);
+            actions.Children.Add(delete);
+            Grid.SetColumn(actions, 1);
+            row.Children.Add(actions);
+            into.Children.Add(row);
+        }
+
+        var import = new Button { Style = (Style)FindResource("Row"), Margin = new Thickness(0, 6, 0, 0), Content = new TextBlock { Text = "Theme-Datei importieren", FontSize = 12 } };
+        import.Click += (_, _) =>
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog { Filter = filter };
+            if (dialog.ShowDialog() == true && Theme.Import(dialog.FileName) is { } imported) Theme.Use(imported);
+        };
+        into.Children.Add(import);
     }
 
     private static readonly HashSet<string> OpenGroups = new() { "Allgemein" };

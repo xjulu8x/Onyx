@@ -8,6 +8,9 @@
         FontFamily="{DynamicResource Ui}" Foreground="White"
         TextOptions.TextFormattingMode="Display">
     <Grid x:Name="IslandRoot">
+        <!-- The ears only show in the docked form, where they curve the island into the screen edge -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Top">
+        <Path x:Name="EarLeft" Width="16" Height="16" VerticalAlignment="Top" Data="M0,0 L16,0 L16,16 Q16,0 0,0 Z" Visibility="Collapsed"/>
         <Border x:Name="Island" Width="240" Height="34" HorizontalAlignment="Center" VerticalAlignment="Top"
                 Background="#F7060608" CornerRadius="17" Margin="0,8,0,0" ClipToBounds="True"
                 MouseEnter="Island_MouseEnter" MouseLeave="Island_MouseLeave" MouseRightButtonUp="Island_RightClick">
@@ -117,5 +120,7 @@
                 </Grid>
             </Grid>
         </Border>
+        <Path x:Name="EarRight" Width="16" Height="16" VerticalAlignment="Top" Data="M16,0 L0,0 L0,16 Q0,0 16,0 Z" Visibility="Collapsed"/>
+        </StackPanel>
     </Grid>
 </Window>

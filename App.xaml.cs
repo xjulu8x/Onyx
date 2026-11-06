@@ -59,12 +59,13 @@ public partial class App : Application
         KeyboardHook.Install();
         _widgets.Add(new StatsWindow());
         _widgets.Add(new TempWindow());
-        ApplyWidgetVisibility();
+        ApplyWidgetLayout();
         ApplyWidgetLook();
         TaskbarHider.Start();
         Task.Run(Settings.MigrateAndRepair);
         Taskbar.StartTray();
         UpdateService.Start();
+        Theme.StartAutoTheme();
 
         if (e.Args.Contains("--probe")) Probe();
         var snap = Array.IndexOf(e.Args, "--snapshot");
@@ -138,9 +139,19 @@ public partial class App : Application
         Quit();
     }
 
+    /// <summary>The widget windows on screen: with "Einzeln" the stats window is replaced by its parts.</summary>
+    private IEnumerable<Window> Widgets => _widgets.SelectMany(w => w is StatsWindow { Parts.Count: > 0 } stats ? stats.Parts : new[] { w });
+
+    public void ApplyWidgetLayout()
+    {
+        foreach (var stats in _widgets.OfType<StatsWindow>()) stats.ApplyLayout();
+        ApplyWidgetVisibility();
+        ApplyWidgetLook();
+    }
+
     public void ApplyWidgetVisibility()
     {
-        foreach (var w in _widgets)
+        foreach (var w in Widgets)
             if (Settings.Current.ShowWidgets) w.Show(); else w.Hide();
     }
 
@@ -149,14 +160,15 @@ public partial class App : Application
         var s = Settings.Current;
         var brush = new System.Windows.Media.SolidColorBrush(Settings.ToColor(s.WidgetColor, 0xFF, System.Windows.Media.Colors.White));
         brush.Freeze();
-        foreach (var w in _widgets)
+        foreach (var stats in _widgets.OfType<StatsWindow>()) stats.Foreground = brush; // its graphs follow, also when hidden behind its parts
+        foreach (var w in Widgets)
         {
             w.Foreground = brush;
             w.Opacity = s.WidgetOpacity;
             // Grows and shrinks around the right edge, so widgets next to the screen edge stay on screen.
             double right = w.Left + w.ActualWidth;
             ((FrameworkElement)w.Content).LayoutTransform = new System.Windows.Media.ScaleTransform(s.WidgetScale, s.WidgetScale);
-            if (w is StatsWindow) w.Width = 250 * s.WidgetScale;
+            if (w is StatsWindow || w.Tag is "wide") w.Width = 250 * s.WidgetScale;
             if (!w.IsLoaded || double.IsNaN(right)) continue;
             w.UpdateLayout();
             w.Left = right - w.ActualWidth;

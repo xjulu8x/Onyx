@@ -40,6 +40,16 @@ public class Settings
     public int RimStyle { get; set; } = 1; // 0 none, 1 subtle, 2 accent, 3 light run
     public int ClockStyle { get; set; } // 0 time and date, 1 time, 2 large
     public bool Grain { get; set; }
+    public int IslandShape { get; set; } // 0 floating, 1 docked, 2 capsule
+    public int MotionStyle { get; set; } // 0 soft, 1 springy, 2 direct
+    public int WidgetGraph { get; set; } // 0 line, 1 bars, 2 rings
+    public bool WidgetsFree { get; set; } // every block is its own widget
+
+    // Time-of-day design and own themes
+    public bool AutoTheme { get; set; }
+    public string DayTheme { get; set; } = "Graphit";
+    public string NightTheme { get; set; } = "Onyx";
+    public Dictionary<string, Dictionary<string, JsonElement>> CustomThemes { get; set; } = new();
 
     /// <summary>Parses a "#RRGGBB" setting; falls back to the given color when the value is broken.</summary>
     public static System.Windows.Media.Color ToColor(string hex, byte alpha, System.Windows.Media.Color fallback)
