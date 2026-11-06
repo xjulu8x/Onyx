@@ -4,7 +4,7 @@
         Title="Flyout" Width="380" SizeToContent="Height"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False" ResizeMode="NoResize" Topmost="True"
-        FontFamily="{StaticResource Ui}" Foreground="White"
+        FontFamily="{DynamicResource Ui}" Foreground="White"
         Deactivated="Window_Deactivated" PreviewKeyDown="Window_PreviewKeyDown">
     <Window.Resources>
         <Style x:Key="Tile" TargetType="Button">

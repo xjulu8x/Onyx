@@ -95,6 +95,9 @@ Die Positionen bleiben auch nach einem Neustart gespeichert.
 ### Farben
 Island → Zahnrad → unten **Island / Leiste / Widgets** wählen und eine Farbe anklicken.
 
+### Design
+Island → Zahnrad → **„Design“**: Themes per Klick, Akzentfarbe, Schrift, Animationstempo sowie Größe, Ecken und Deckkraft von Taskleiste, Island und Widgets. Alles wirkt sofort.
+
 ---
 
 ## ❓ Häufige Fragen

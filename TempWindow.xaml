@@ -4,7 +4,7 @@
         Title="Temp" SizeToContent="WidthAndHeight"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False" ResizeMode="NoResize"
-        FontFamily="{StaticResource Ui}" Foreground="White"
+        FontFamily="{DynamicResource Ui}" Foreground="White"
         TextOptions.TextFormattingMode="Ideal" TextOptions.TextRenderingMode="Grayscale">
     <Grid Margin="10" Effect="{StaticResource TextShadow}">
         <Grid.ColumnDefinitions>

@@ -49,6 +49,27 @@ public partial class TaskbarWindow : Window
         // Never fully transparent: at least 15 % of the bar's color stays, so icons remain readable.
         byte alpha = (byte)Math.Round(255 * Math.Clamp(1 - Settings.Current.Transparency, 0.15, 1));
         Bg.Background = new SolidColorBrush(Settings.ToColor(Settings.Current.TaskbarColor, alpha, Color.FromRgb(0x06, 0x06, 0x08)));
+
+        var s = Settings.Current;
+        Bg.CornerRadius = new CornerRadius(s.TaskbarRadius);
+        StartBtn.Height = s.TaskbarHeight - 6;
+        foreach (var r in StartLogo.Children.OfType<System.Windows.Shapes.Rectangle>()) r.Fill = Theme.AccentBrush;
+        foreach (var btn in _buttons.Values)
+        {
+            btn.Root.Height = s.TaskbarHeight - 6;
+            btn.Icon.Width = btn.Icon.Height = s.TaskbarIconSize;
+            if (btn.Active) btn.Indicator.Background = Theme.AccentBrush;
+        }
+        // Apps on the left: the music chip moves to the middle so they don't overlap.
+        CenterPanel.HorizontalAlignment = s.TaskbarAppsLeft ? HorizontalAlignment.Left : HorizontalAlignment.Center;
+        CenterPanel.Margin = new Thickness(s.TaskbarAppsLeft ? 6 : 0, 0, 0, 0);
+        MediaChip.HorizontalAlignment = s.TaskbarAppsLeft ? HorizontalAlignment.Center : HorizontalAlignment.Left;
+
+        if (Height != s.TaskbarHeight)
+        {
+            Height = s.TaskbarHeight;
+            if (_hwnd != IntPtr.Zero) PositionAppBar();
+        }
     }
 
     // ---------- notification area ----------
@@ -240,18 +261,18 @@ public partial class TaskbarWindow : Window
         Show();
         Topmost = true;
         Native.BringTopmost(this);
-        Root.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(160)) { EasingFunction = Smooth });
-        _barSlide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(24, 0, TimeSpan.FromMilliseconds(220)) { EasingFunction = Smooth });
+        Root.BeginAnimation(OpacityProperty, new DoubleAnimation(1, Theme.Ms(160)) { EasingFunction = Smooth });
+        _barSlide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(24, 0, Theme.Ms(220)) { EasingFunction = Smooth });
     }
 
     private void HideBar()
     {
         if (!_barShown) return;
         _barShown = false;
-        var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(140));
+        var fade = new DoubleAnimation(0, Theme.Ms(140));
         fade.Completed += (_, _) => { if (!_barShown) { Topmost = false; Hide(); } };
         Root.BeginAnimation(OpacityProperty, fade);
-        _barSlide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(24, TimeSpan.FromMilliseconds(140)));
+        _barSlide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(24, Theme.Ms(140)));
     }
 
     // While peeking, a click anywhere outside our own windows (e.g. into the game) ends the peek.
@@ -335,6 +356,7 @@ public partial class TaskbarWindow : Window
         public AppEntry App;
         public Border Root;
         public Border Indicator;
+        public Image Icon;
         public ScaleTransform Scale;
         public bool Active;
     }
@@ -346,7 +368,6 @@ public partial class TaskbarWindow : Window
     private readonly Dictionary<string, AppButton> _buttons = new();
     private static readonly IEasingFunction Spring = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.5 };
     private static readonly IEasingFunction Smooth = new CubicEase { EasingMode = EasingMode.EaseOut };
-    private static readonly Brush ActiveDot = new SolidColorBrush(Color.FromRgb(0x7C, 0xD3, 0xFF));
     private static readonly Brush IdleDot = new SolidColorBrush(Color.FromArgb(0xB0, 255, 255, 255));
     private int _tick;
 
@@ -394,8 +415,8 @@ public partial class TaskbarWindow : Window
     {
         double width = !running ? 0 : active ? 16 : 6;
         if (btn.Indicator.Width != width || btn.Active != active)
-            btn.Indicator.BeginAnimation(WidthProperty, new DoubleAnimation(width, TimeSpan.FromMilliseconds(220)) { EasingFunction = Smooth });
-        btn.Indicator.Background = active ? ActiveDot : IdleDot;
+            btn.Indicator.BeginAnimation(WidthProperty, new DoubleAnimation(width, Theme.Ms(220)) { EasingFunction = Smooth });
+        btn.Indicator.Background = active ? Theme.AccentBrush : IdleDot;
         if (btn.Active == active) return;
         btn.Active = active;
         btn.Root.Tag = active;
@@ -408,9 +429,10 @@ public partial class TaskbarWindow : Window
         var grid = new Grid { RenderTransform = btn.Scale, RenderTransformOrigin = new Point(0.5, 0.5) };
         var img = new Image
         {
-            Source = app.Icon, Width = 24, Height = 24,
+            Source = app.Icon, Width = Settings.Current.TaskbarIconSize, Height = Settings.Current.TaskbarIconSize,
             HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
         };
+        btn.Icon = img;
         RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
         grid.Children.Add(img);
         btn.Indicator = new Border
@@ -422,7 +444,7 @@ public partial class TaskbarWindow : Window
 
         btn.Root = new Border
         {
-            Width = 46, Height = 44, CornerRadius = new CornerRadius(12), Margin = new Thickness(1, 0, 1, 0),
+            Width = 46, Height = Settings.Current.TaskbarHeight - 6, CornerRadius = new CornerRadius(12), Margin = new Thickness(1, 0, 1, 0),
             Background = NoBrush, Child = grid, ToolTip = app.Name, Tag = false,
         };
         btn.Root.MouseEnter += Hover_Enter;
@@ -435,7 +457,7 @@ public partial class TaskbarWindow : Window
 
     private static void Press(AppButton btn, double to, int ms, IEasingFunction ease)
     {
-        var a = new DoubleAnimation(to, TimeSpan.FromMilliseconds(ms)) { EasingFunction = ease };
+        var a = new DoubleAnimation(to, Theme.Ms(ms)) { EasingFunction = ease };
         btn.Scale.BeginAnimation(ScaleTransform.ScaleXProperty, a);
         btn.Scale.BeginAnimation(ScaleTransform.ScaleYProperty, a);
     }
@@ -552,9 +574,9 @@ public partial class TaskbarWindow : Window
     }
 
     private void Media_MouseEnter(object sender, MouseEventArgs e) =>
-        MediaControls.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(150)));
+        MediaControls.BeginAnimation(OpacityProperty, new DoubleAnimation(1, Theme.Ms(150)));
     private void Media_MouseLeave(object sender, MouseEventArgs e) =>
-        MediaControls.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(150)));
+        MediaControls.BeginAnimation(OpacityProperty, new DoubleAnimation(0, Theme.Ms(150)));
 
     private void Art_Click(object sender, MouseButtonEventArgs e) => _media.PlayPause();
     private void Prev_Click(object sender, RoutedEventArgs e) => _media.Previous();

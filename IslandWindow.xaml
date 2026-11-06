@@ -5,9 +5,9 @@
         Title="Island" Width="560" Height="210" Top="0"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False" ResizeMode="NoResize" Topmost="True"
-        FontFamily="{StaticResource Ui}" Foreground="White"
+        FontFamily="{DynamicResource Ui}" Foreground="White"
         TextOptions.TextFormattingMode="Display">
-    <Grid>
+    <Grid x:Name="IslandRoot">
         <Border x:Name="Island" Width="240" Height="34" HorizontalAlignment="Center" VerticalAlignment="Top"
                 Background="#F7060608" CornerRadius="17" Margin="0,8,0,0" ClipToBounds="True"
                 MouseEnter="Island_MouseEnter" MouseLeave="Island_MouseLeave" MouseRightButtonUp="Island_RightClick">

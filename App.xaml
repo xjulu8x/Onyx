@@ -71,7 +71,7 @@
         <Style TargetType="MenuItem">
             <Setter Property="OverridesDefaultStyle" Value="True"/>
             <Setter Property="Foreground" Value="White"/>
-            <Setter Property="FontFamily" Value="{StaticResource Ui}"/>
+            <Setter Property="FontFamily" Value="{DynamicResource Ui}"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -116,7 +116,7 @@
             <Setter Property="OverridesDefaultStyle" Value="True"/>
             <Setter Property="HasDropShadow" Value="True"/>
             <Setter Property="Foreground" Value="White"/>
-            <Setter Property="FontFamily" Value="{StaticResource Ui}"/>
+            <Setter Property="FontFamily" Value="{DynamicResource Ui}"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Template">
                 <Setter.Value>

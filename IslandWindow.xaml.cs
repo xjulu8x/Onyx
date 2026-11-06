@@ -53,7 +53,7 @@ public partial class IslandWindow : Window
         fast.Start();
 
         UpdateService.Changed += () => Dispatcher.BeginInvoke(ShowUpdateState);
-        ApplyColor();
+        ApplyLook();
         if (Settings.Current.AlwaysExpanded) SetExpanded(true, animate: false);
         UpdateMedia();
         UpdateStats();
@@ -66,13 +66,13 @@ public partial class IslandWindow : Window
     private void SetExpanded(bool expand, bool animate = true)
     {
         _expanded = expand;
-        double k = animate ? 1 : 0;
+        double k = animate ? Theme.Speed : 0;
         var size = TimeSpan.FromMilliseconds((expand ? 460 : 300) * k);
         var ease = expand ? OpenEase : CloseEase;
 
         Animate(Island, WidthProperty, expand ? ExpandedW : CompactW, size, ease);
         Animate(Island, HeightProperty, expand ? ExpandedH : CompactH, size, ease);
-        Animate(this, RadiusProperty, expand ? 28 : 17, size, ease);
+        Animate(this, RadiusProperty, (expand ? 28 : 17) * Settings.Current.IslandCorners, size, ease);
 
         // The content sits at its final position from the start and is revealed by the growing island (clipped),
         // with only a short fade. No per-frame scaling: that re-renders the whole transparent window and stutters.
@@ -93,7 +93,7 @@ public partial class IslandWindow : Window
         var from = show ? (FrameworkElement)HomeView : SettingsView;
         var to = show ? (FrameworkElement)SettingsView : HomeView;
         if (to.Visibility == Visibility.Visible && from.Visibility != Visibility.Visible) return;
-        var dur = TimeSpan.FromMilliseconds(animate ? 200 : 0);
+        var dur = TimeSpan.FromMilliseconds(animate ? 200 * Theme.Speed : 0);
         var fadeOut = new DoubleAnimation(0, dur) { EasingFunction = FadeEase };
         fadeOut.Completed += (_, _) => { if (to.Visibility == Visibility.Visible) from.Visibility = Visibility.Collapsed; };
         from.BeginAnimation(OpacityProperty, fadeOut);
@@ -145,7 +145,7 @@ public partial class IslandWindow : Window
         {
             ((TextBlock)((StackPanel)arrange.Content).Children[1]).Text = WidgetMover.Editing ? "Fertig" : "Widgets anordnen";
             ((TextBlock)((StackPanel)arrange.Content).Children[0]).Text = WidgetMover.Editing ? "" : "";
-            arrange.Background = WidgetMover.Editing ? new SolidColorBrush(Color.FromRgb(0x2B, 0x8C, 0xFF)) : new SolidColorBrush(Color.FromArgb(0x1A, 255, 255, 255));
+            arrange.Background = WidgetMover.Editing ? new SolidColorBrush(Theme.Accent) : new SolidColorBrush(Color.FromArgb(0x1A, 255, 255, 255));
         }
         arrange = Pill("", "", () =>
         {
@@ -157,6 +157,11 @@ public partial class IslandWindow : Window
         arrange.VerticalAlignment = VerticalAlignment.Center;
         UpdateArrange();
         grid.Children.Add(arrange);
+
+        var design = Pill("Design", "", () => app.Flyout.Toggle(FlyoutKind.Design));
+        design.HorizontalAlignment = HorizontalAlignment.Left;
+        design.VerticalAlignment = VerticalAlignment.Center;
+        grid.Children.Add(design);
         if (SystemMonitor.CpuTempProblem != null)
         {
             var admin = Pill(SystemMonitor.IsElevated ? "CPU-Treiber installieren" : "Als Admin starten", "", app.FixCpuTemp);
@@ -169,7 +174,7 @@ public partial class IslandWindow : Window
         {
             _updatePill = Pill("", "", app.InstallUpdate);
             _updatePill.Margin = new Thickness(0, 0, 6, 0);
-            _updatePill.Background = new SolidColorBrush(Color.FromRgb(0x2B, 0x8C, 0xFF));
+            _updatePill.Background = new SolidColorBrush(Theme.Accent);
             right.Children.Insert(0, _updatePill);
             ShowUpdateState();
         }
@@ -205,7 +210,7 @@ public partial class IslandWindow : Window
         {
             if (_colorTarget == 0) { s.IslandColor = hex; ApplyColor(); }
             else if (_colorTarget == 1) { s.TaskbarColor = hex; app.Taskbar.ApplyLook(); }
-            else { s.WidgetColor = hex; app.ApplyWidgetColor(); }
+            else { s.WidgetColor = hex; app.ApplyWidgetLook(); }
             s.Save();
         }
 
@@ -255,14 +260,27 @@ public partial class IslandWindow : Window
     }
 
     private void ApplyColor() =>
-        Island.Background = new SolidColorBrush(Settings.ToColor(Settings.Current.IslandColor, 0xF7, Color.FromRgb(0x06, 0x06, 0x08)));
+        Island.Background = new SolidColorBrush(Settings.ToColor(Settings.Current.IslandColor, (byte)Math.Round(255 * Settings.Current.IslandOpacity), Color.FromRgb(0x06, 0x06, 0x08)));
+
+    /// <summary>Color, size and rounding from the design settings. The scale is static, so the expand animation stays as cheap as before.</summary>
+    public void ApplyLook()
+    {
+        var s = Settings.Current;
+        ApplyColor();
+        IslandRoot.LayoutTransform = new ScaleTransform(s.IslandScale, s.IslandScale);
+        Width = 560 * s.IslandScale;
+        Height = 210 * s.IslandScale;
+        Left = (SystemParameters.PrimaryScreenWidth - Width) / 2;
+        BeginAnimation(RadiusProperty, null);
+        Radius = (_expanded ? 28 : 17) * s.IslandCorners;
+    }
 
     private Button _updatePill;
 
     /// <summary>A new version turns the gear blue; the button in the settings shows the version or the download progress.</summary>
     private void ShowUpdateState()
     {
-        GearBtn.Foreground = UpdateService.Available != null ? new SolidColorBrush(Color.FromRgb(0x2B, 0x8C, 0xFF)) : Brushes.White;
+        GearBtn.Foreground = UpdateService.Available != null ? new SolidColorBrush(Theme.Accent) : Brushes.White;
         if (_updatePill == null) return;
         ((TextBlock)((StackPanel)_updatePill.Content).Children[1]).Text =
             UpdateService.Progress is { } p ? $"Lädt {p} %" : $"Update auf {UpdateService.Available}";

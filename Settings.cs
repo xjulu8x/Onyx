@@ -21,6 +21,20 @@ public class Settings
     public string WidgetColor { get; set; } = "#FFFFFF";
     public Dictionary<string, double[]> WidgetPositions { get; set; } = new();
 
+    // Design page
+    public string AccentColor { get; set; } = "#2B8CFF";
+    public string FontFamily { get; set; } = "Segoe UI Variable Display, Segoe UI";
+    public int AnimationSpeed { get; set; } = 1; // 0 fast, 1 normal, 2 off
+    public double TaskbarHeight { get; set; } = 50;
+    public double TaskbarIconSize { get; set; } = 24;
+    public double TaskbarRadius { get; set; } = 16;
+    public bool TaskbarAppsLeft { get; set; }
+    public double IslandScale { get; set; } = 1;
+    public double IslandCorners { get; set; } = 1; // share of the full rounding
+    public double IslandOpacity { get; set; } = 0.97;
+    public double WidgetScale { get; set; } = 1;
+    public double WidgetOpacity { get; set; } = 1;
+
     /// <summary>Parses a "#RRGGBB" setting; falls back to the given color when the value is broken.</summary>
     public static System.Windows.Media.Color ToColor(string hex, byte alpha, System.Windows.Media.Color fallback)
     {

@@ -12,7 +12,7 @@ using System.Windows.Threading;
 
 namespace DesktopOverlay;
 
-public enum FlyoutKind { Network, Volume, ActionCenter, TaskbarSettings, Tray }
+public enum FlyoutKind { Network, Volume, ActionCenter, TaskbarSettings, Tray, Design }
 
 /// <summary>Taskbar pop-ups (network, volume, action center) in the overlay's own look, opened bottom-right above the taskbar.</summary>
 public partial class FlyoutWindow : Window
@@ -57,6 +57,7 @@ public partial class FlyoutWindow : Window
             FlyoutKind.Volume => BuildVolume(),
             FlyoutKind.TaskbarSettings => BuildTaskbarSettings(),
             FlyoutKind.Tray => BuildTray(),
+            FlyoutKind.Design => BuildDesign(),
             _ => BuildActionCenter(),
         };
         Panel.Opacity = 0;
@@ -67,8 +68,8 @@ public partial class FlyoutWindow : Window
         UpdateLayout();
         Reposition();
         if (activate) Win32.Activate(new WindowInteropHelper(this).Handle);
-        Panel.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(180)) { EasingFunction = Ease });
-        Slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(24, 0, TimeSpan.FromMilliseconds(280)) { EasingFunction = Ease });
+        Panel.BeginAnimation(OpacityProperty, new DoubleAnimation(1, Theme.Ms(180)) { EasingFunction = Ease });
+        Slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(24, 0, Theme.Ms(280)) { EasingFunction = Ease });
     }
 
     private void Reposition()
@@ -82,11 +83,11 @@ public partial class FlyoutWindow : Window
         if (!IsVisible || _closing) return;
         _closing = true;
         _closedAt = DateTime.Now;
-        var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(130));
+        var fade = new DoubleAnimation(0, Theme.Ms(130));
         // The content is rebuilt on every open, so nothing has to stay in memory while closed.
         fade.Completed += (_, _) => { if (_closing) { Hide(); _closing = false; Host.Content = null; } };
         Panel.BeginAnimation(OpacityProperty, fade);
-        Slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(16, TimeSpan.FromMilliseconds(130)));
+        Slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(16, Theme.Ms(130)));
     }
 
     private void Window_Deactivated(object sender, EventArgs e) => CloseFlyout();
@@ -182,6 +183,106 @@ public partial class FlyoutWindow : Window
         return root;
     }
 
+    // ---------- design ----------
+
+    private TextBlock SectionTitle(string text) => new() { Text = text, FontSize = 12, FontWeight = FontWeights.SemiBold, Foreground = Dim, Margin = new Thickness(2, 14, 0, 6) };
+
+    /// <summary>Slider for a setting between min and max; changes apply live and are saved right away.</summary>
+    private FrameworkElement DesignSlider(string label, double min, double max, Func<double> get, Action<double> set, Func<double, string> format)
+    {
+        var root = new StackPanel { Margin = new Thickness(2, 0, 0, 2) };
+        var head = new Grid();
+        head.Children.Add(new TextBlock { Text = label, FontSize = 12 });
+        var value = new TextBlock { FontSize = 12, Foreground = Dim, HorizontalAlignment = HorizontalAlignment.Right };
+        head.Children.Add(value);
+        root.Children.Add(head);
+        var slider = new VolumeSlider(() => (float)((get() - min) / (max - min)), v =>
+        {
+            set(min + v * (max - min));
+            Settings.Current.Save();
+        });
+        slider.Changed += (_, _) => value.Text = format(get());
+        slider.Loaded += (_, _) => slider.Refresh();
+        root.Children.Add(slider);
+        return root;
+    }
+
+    /// <summary>Row of pills of which one is selected.</summary>
+    private FrameworkElement Choice(string[] options, int selected, Action<int> pick)
+    {
+        var row = new System.Windows.Controls.Primitives.UniformGrid { Rows = 1, Margin = new Thickness(0, 0, 0, 4) };
+        var on = new SolidColorBrush(Color.FromArgb(0x30, 255, 255, 255));
+        var off = new SolidColorBrush(Color.FromArgb(0x10, 255, 255, 255));
+        for (int i = 0; i < options.Length; i++)
+        {
+            int index = i;
+            var chip = new Border
+            {
+                CornerRadius = new CornerRadius(10), Padding = new Thickness(6, 6, 6, 6), Margin = new Thickness(2), Cursor = Cursors.Hand,
+                Background = i == selected ? on : off,
+                Child = new TextBlock { Text = options[i], FontSize = 11, FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis },
+            };
+            chip.MouseLeftButtonUp += (_, _) =>
+            {
+                foreach (Border c in row.Children) c.Background = c == chip ? on : off;
+                pick(index);
+            };
+            row.Children.Add(chip);
+        }
+        return row;
+    }
+
+    private FrameworkElement BuildDesign()
+    {
+        var s = Settings.Current;
+        var app = (App)Application.Current;
+        var bar = app.Taskbar;
+        var root = new StackPanel();
+        root.Children.Add(Header("Design"));
+
+        root.Children.Add(new TextBlock { Text = "Theme", FontSize = 12, FontWeight = FontWeights.SemiBold, Foreground = Dim, Margin = new Thickness(2, 0, 0, 6) });
+        root.Children.Add(Choice(Theme.Presets.Select(p => p.Name).ToArray(), Array.FindIndex(Theme.Presets, p => p.Accent == s.AccentColor && p.Island == s.IslandColor), i =>
+        {
+            Theme.UsePreset(i);
+            Host.Content = BuildDesign(); // the switches and values shown here changed too
+        }));
+
+        root.Children.Add(SectionTitle("Akzentfarbe"));
+        root.Children.Add(Choice(new[] { "Blau", "Hellblau", "Grau", "Weiß" }, Array.IndexOf(Theme.AccentColors, s.AccentColor), i =>
+        {
+            s.AccentColor = Theme.AccentColors[i];
+            s.Save();
+            bar.ApplyLook();
+        }));
+
+        root.Children.Add(SectionTitle("Schrift"));
+        root.Children.Add(Choice(Theme.Fonts.Select(f => f.Label).ToArray(), Array.FindIndex(Theme.Fonts, f => f.Family == s.FontFamily), i =>
+        {
+            s.FontFamily = Theme.Fonts[i].Family;
+            s.Save();
+            Theme.ApplyFont();
+        }));
+
+        root.Children.Add(SectionTitle("Animationen"));
+        root.Children.Add(Choice(new[] { "Schnell", "Normal", "Aus" }, s.AnimationSpeed, i => { s.AnimationSpeed = i; s.Save(); }));
+
+        root.Children.Add(SectionTitle("Taskleiste"));
+        root.Children.Add(DesignSlider("Höhe", 38, 64, () => s.TaskbarHeight, v => { s.TaskbarHeight = Math.Round(v); bar.ApplyLook(); }, v => $"{v:0} px"));
+        root.Children.Add(DesignSlider("Symbolgröße", 18, 32, () => s.TaskbarIconSize, v => { s.TaskbarIconSize = Math.Round(v); bar.ApplyLook(); }, v => $"{v:0} px"));
+        root.Children.Add(DesignSlider("Ecken", 0, 25, () => s.TaskbarRadius, v => { s.TaskbarRadius = Math.Round(v); bar.ApplyLook(); }, v => $"{v:0} px"));
+        root.Children.Add(Choice(new[] { "Apps mittig", "Apps links" }, s.TaskbarAppsLeft ? 1 : 0, i => { s.TaskbarAppsLeft = i == 1; s.Save(); bar.ApplyLook(); }));
+
+        root.Children.Add(SectionTitle("Island"));
+        root.Children.Add(DesignSlider("Größe", 0.8, 1.2, () => s.IslandScale, v => { s.IslandScale = Math.Round(v, 2); app.Island.ApplyLook(); }, v => $"{v * 100:0} %"));
+        root.Children.Add(DesignSlider("Ecken", 0.2, 1, () => s.IslandCorners, v => { s.IslandCorners = Math.Round(v, 2); app.Island.ApplyLook(); }, v => $"{v * 100:0} %"));
+        root.Children.Add(DesignSlider("Deckkraft", 0.4, 1, () => s.IslandOpacity, v => { s.IslandOpacity = Math.Round(v, 2); app.Island.ApplyLook(); }, v => $"{v * 100:0} %"));
+
+        root.Children.Add(SectionTitle("Widgets"));
+        root.Children.Add(DesignSlider("Größe", 0.7, 1.3, () => s.WidgetScale, v => { s.WidgetScale = Math.Round(v, 2); app.ApplyWidgetLook(); }, v => $"{v * 100:0} %"));
+        root.Children.Add(DesignSlider("Deckkraft", 0.3, 1, () => s.WidgetOpacity, v => { s.WidgetOpacity = Math.Round(v, 2); app.ApplyWidgetLook(); }, v => $"{v * 100:0} %"));
+        return root;
+    }
+
     // ---------- tray overflow ----------
 
     private FrameworkElement BuildTray()
@@ -250,7 +351,7 @@ public partial class FlyoutWindow : Window
         var cg = new Grid();
         cg.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         cg.ColumnDefinitions.Add(new ColumnDefinition());
-        var iconBg = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(20), Background = new SolidColorBrush(active != null ? Color.FromRgb(0x2B, 0x8C, 0xFF) : Color.FromArgb(0x26, 255, 255, 255)) };
+        var iconBg = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(20), Background = new SolidColorBrush(active != null ? Theme.Accent : Color.FromArgb(0x26, 255, 255, 255)) };
         var ic = Glyph(active == null ? "" : wifi ? "" : "", 17);
         ic.HorizontalAlignment = HorizontalAlignment.Center;
         iconBg.Child = ic;
@@ -521,7 +622,7 @@ public partial class FlyoutWindow : Window
                 foreach (var pid in app.Pids)
                     try { using var p = Process.GetProcessById(pid); p.Kill(entireProcessTree: true); } catch { }
             });
-            row.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(150)));
+            row.BeginAnimation(OpacityProperty, new DoubleAnimation(0, Theme.Ms(150)));
             await Task.Delay(160);
             list.Children.Remove(row);
             header.Text = $"Laufende Apps ({list.Children.Count})";
@@ -549,7 +650,7 @@ public partial class FlyoutWindow : Window
             grid.Children.Add(new Border
             {
                 Width = 28, Height = 28, CornerRadius = new CornerRadius(14), Margin = new Thickness(1),
-                Background = isToday ? new SolidColorBrush(Color.FromRgb(0x2B, 0x8C, 0xFF)) : Brushes.Transparent,
+                Background = isToday ? new SolidColorBrush(Theme.Accent) : Brushes.Transparent,
                 Child = new TextBlock { Text = day.ToString(), FontSize = 11, FontWeight = isToday ? FontWeights.Bold : FontWeights.Normal, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
             });
         }

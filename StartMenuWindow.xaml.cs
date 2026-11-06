@@ -60,19 +60,19 @@ public partial class StartMenuWindow : Window
             Search.Focus();
             Keyboard.Focus(Search);
         }
-        Panel.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(180)) { EasingFunction = Ease });
-        Slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(30, 0, TimeSpan.FromMilliseconds(280)) { EasingFunction = Ease });
+        Panel.BeginAnimation(OpacityProperty, new DoubleAnimation(1, Theme.Ms(180)) { EasingFunction = Ease });
+        Slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(30, 0, Theme.Ms(280)) { EasingFunction = Ease });
     }
 
     private void CloseMenu()
     {
         if (!IsVisible || _closing) return;
         _closing = true;
-        var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(140));
+        var fade = new DoubleAnimation(0, Theme.Ms(140));
         // The rows are rebuilt on every open, so they don't have to stay in memory while closed.
         fade.Completed += (_, _) => { if (_closing) { Hide(); _closing = false; Sections.Children.Clear(); } };
         Panel.BeginAnimation(OpacityProperty, fade);
-        Slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(20, TimeSpan.FromMilliseconds(140)));
+        Slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(20, Theme.Ms(140)));
     }
 
     private void Window_Deactivated(object sender, EventArgs e) => CloseMenu();

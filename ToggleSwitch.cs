@@ -10,7 +10,8 @@ namespace DesktopOverlay;
 /// <summary>Small animated on/off pill switch in the overlay's style.</summary>
 public class ToggleSwitch : Border
 {
-    private static readonly Color On = Color.FromRgb(0x2B, 0x8C, 0xFF), Off = Color.FromArgb(0x38, 255, 255, 255);
+    private static Color On => Theme.Accent;
+    private static readonly Color Off = Color.FromArgb(0x38, 255, 255, 255);
     private readonly TranslateTransform _knob = new();
     private readonly SolidColorBrush _bg;
     private bool _isOn;

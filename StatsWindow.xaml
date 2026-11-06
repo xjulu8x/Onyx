@@ -4,7 +4,7 @@
         Title="Stats" Width="250" SizeToContent="Height" Top="14"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False" ResizeMode="NoResize"
-        FontFamily="{StaticResource Ui}" Foreground="White"
+        FontFamily="{DynamicResource Ui}" Foreground="White"
         TextOptions.TextFormattingMode="Ideal" TextOptions.TextRenderingMode="Grayscale">
     <StackPanel Effect="{StaticResource TextShadow}" Margin="10">
         <!-- Network -->

@@ -7,6 +7,7 @@ public partial class App : Application
     private static Mutex _single;
     private readonly List<Window> _widgets = new();
 
+    public IslandWindow Island { get; private set; }
     public TaskbarWindow Taskbar { get; private set; }
     public StartMenuWindow StartMenu { get; private set; }
     public FlyoutWindow Flyout { get; private set; }
@@ -47,7 +48,9 @@ public partial class App : Application
         EventManager.RegisterClassHandler(typeof(System.Windows.Controls.ContextMenu), System.Windows.Controls.ContextMenu.OpenedEvent,
             new RoutedEventHandler((s, _) => MenuClickWatch.Start((System.Windows.Controls.ContextMenu)s)));
 
-        new IslandWindow().Show();
+        Theme.ApplyFont();
+        Island = new IslandWindow();
+        Island.Show();
         Taskbar = new TaskbarWindow();
         Taskbar.Show();
         StartMenu = new StartMenuWindow();
@@ -57,7 +60,7 @@ public partial class App : Application
         _widgets.Add(new StatsWindow());
         _widgets.Add(new TempWindow());
         ApplyWidgetVisibility();
-        ApplyWidgetColor();
+        ApplyWidgetLook();
         TaskbarHider.Start();
         Task.Run(Settings.MigrateAndRepair);
         Taskbar.StartTray();
@@ -65,7 +68,7 @@ public partial class App : Application
 
         if (e.Args.Contains("--probe")) Probe();
         var snap = Array.IndexOf(e.Args, "--snapshot");
-        if (snap >= 0 && snap + 1 < e.Args.Length) Snapshot(e.Args[snap + 1]);
+        if (snap >= 0 && snap + 1 < e.Args.Length) Snapshot(e.Args[snap + 1], e.Args.Contains("design") ? FlyoutKind.Design : FlyoutKind.ActionCenter);
     }
 
     /// <summary>Restarts the overlay with admin rights (needed for the CPU temperature sensor). Shows the UAC prompt.</summary>
@@ -113,12 +116,12 @@ public partial class App : Application
     }
 
     /// <summary>Debug aid: renders every window to PNG files and exits.</summary>
-    private async void Snapshot(string dir)
+    private async void Snapshot(string dir, FlyoutKind flyout)
     {
         foreach (Window w in Windows) if (w is IslandWindow iw) iw.ForceExpand();
         // Opened without focus so nothing typed elsewhere ends up in them.
         StartMenu.Toggle(activate: false);
-        Flyout.Toggle(FlyoutKind.ActionCenter, activate: false);
+        Flyout.Toggle(flyout, activate: false);
         await Task.Delay(4000);
         System.IO.Directory.CreateDirectory(dir);
         foreach (Window w in Windows)
@@ -141,11 +144,23 @@ public partial class App : Application
             if (Settings.Current.ShowWidgets) w.Show(); else w.Hide();
     }
 
-    public void ApplyWidgetColor()
+    public void ApplyWidgetLook()
     {
-        var brush = new System.Windows.Media.SolidColorBrush(Settings.ToColor(Settings.Current.WidgetColor, 0xFF, System.Windows.Media.Colors.White));
+        var s = Settings.Current;
+        var brush = new System.Windows.Media.SolidColorBrush(Settings.ToColor(s.WidgetColor, 0xFF, System.Windows.Media.Colors.White));
         brush.Freeze();
-        foreach (var w in _widgets) w.Foreground = brush;
+        foreach (var w in _widgets)
+        {
+            w.Foreground = brush;
+            w.Opacity = s.WidgetOpacity;
+            // Grows and shrinks around the right edge, so widgets next to the screen edge stay on screen.
+            double right = w.Left + w.ActualWidth;
+            ((FrameworkElement)w.Content).LayoutTransform = new System.Windows.Media.ScaleTransform(s.WidgetScale, s.WidgetScale);
+            if (w is StatsWindow) w.Width = 250 * s.WidgetScale;
+            if (!w.IsLoaded || double.IsNaN(right)) continue;
+            w.UpdateLayout();
+            w.Left = right - w.ActualWidth;
+        }
     }
 
     private void RestoreShell()
