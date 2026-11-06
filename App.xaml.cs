@@ -60,6 +60,7 @@ public partial class App : Application
         ApplyWidgetColor();
         TaskbarHider.Start();
         Task.Run(Settings.MigrateAndRepair);
+        Taskbar.StartTray();
         UpdateService.Start();
 
         if (e.Args.Contains("--probe")) Probe();
@@ -107,7 +108,7 @@ public partial class App : Application
         await Task.Delay(7000);
         var s = SystemMonitor.Instance;
         System.IO.File.WriteAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "overlay_probe.txt"),
-            $"cpu={s.CpuTemp} gpu={s.GpuTemp} elevated={SystemMonitor.IsElevated}\npinned: " + string.Join(" | ", TaskbarApps.Pinned().Select(p => p.Name + (p.Icon == null ? " (no icon)" : ""))));
+            $"cpu={s.CpuTemp} gpu={s.GpuTemp} elevated={SystemMonitor.IsElevated}\ntray: {string.Join(" | ", Tray.Visible().Select(i => (i.Title ?? "").ReplaceLineEndings(" ")))}\npinned: " +string.Join(" | ", TaskbarApps.Pinned().Select(p => p.Name + (p.Icon == null ? " (no icon)" : ""))));
         Quit();
     }
 
@@ -150,6 +151,7 @@ public partial class App : Application
     private void RestoreShell()
     {
         KeyboardHook.Uninstall();
+        Tray.Stop();
         try { Taskbar?.Shutdown(); } catch { }
         TaskbarHider.Restore();
     }

@@ -78,6 +78,7 @@ Onyx prüft selbst, ob es eine neue Version gibt. Dann wird das **Zahnrad in der
 | Rechtsklick auf App | Neues Fenster / Fenster schließen |
 | Rechtsklick auf freie Stelle | **Task-Manager** und **Taskleisteneinstellungen** |
 | WLAN- / Lautstärke-Symbol | Eigene Popups |
+| Symbole von Hintergrund-Apps | Links- und Rechtsklick wie bei Windows (Steam, Discord, …) |
 | **Aktivitätszentrum** | Schnellaktionen, Benachrichtigungen, laufende Apps beenden, Kalender |
 
 **In Vollbild-Spielen** verschwindet die Taskleiste automatisch. Mit der **Windows-Taste** kommt sie zurück, bis du wieder ins Spiel klickst.

@@ -12,7 +12,7 @@ using System.Windows.Threading;
 
 namespace DesktopOverlay;
 
-public enum FlyoutKind { Network, Volume, ActionCenter, TaskbarSettings }
+public enum FlyoutKind { Network, Volume, ActionCenter, TaskbarSettings, Tray }
 
 /// <summary>Taskbar pop-ups (network, volume, action center) in the overlay's own look, opened bottom-right above the taskbar.</summary>
 public partial class FlyoutWindow : Window
@@ -56,6 +56,7 @@ public partial class FlyoutWindow : Window
             FlyoutKind.Network => BuildNetwork(),
             FlyoutKind.Volume => BuildVolume(),
             FlyoutKind.TaskbarSettings => BuildTaskbarSettings(),
+            FlyoutKind.Tray => BuildTray(),
             _ => BuildActionCenter(),
         };
         Panel.Opacity = 0;
@@ -178,6 +179,18 @@ public partial class FlyoutWindow : Window
         root.Children.Add(VolumeRow());
         if (MediaCard() is { } media) root.Children.Add(media);
         root.Children.Add(LinkButton("Sound-Einstellungen", "ms-settings:sound"));
+        return root;
+    }
+
+    // ---------- tray overflow ----------
+
+    private FrameworkElement BuildTray()
+    {
+        var root = new StackPanel();
+        root.Children.Add(Header("Weitere Symbole"));
+        var icons = new WrapPanel();
+        foreach (var icon in Tray.Visible()) icons.Children.Add(Tray.Button(icon));
+        root.Children.Add(icons);
         return root;
     }
 

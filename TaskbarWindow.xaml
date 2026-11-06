@@ -63,6 +63,8 @@
 
         <!-- Right: tray -->
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,10,0" Effect="{StaticResource TextShadow}">
+            <!-- Icons of background apps (Steam, Discord, ...); filled by RebuildTray -->
+            <StackPanel x:Name="TrayPanel" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,2,0"/>
             <Button x:Name="NetBtn" Style="{StaticResource TrayButton}" Content="&#xE701;" Click="Network_Click" ToolTip="Netzwerk"/>
             <Button x:Name="VolBtn" Style="{StaticResource TrayButton}" Content="&#xE767;" Click="Volume_Click"
                     MouseWheel="Vol_Wheel" ToolTip="Lautst&#xE4;rke (Mausrad)"/>

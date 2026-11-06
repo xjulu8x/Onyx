@@ -29,9 +29,15 @@ public static class TaskbarHider
 
     private static IEnumerable<IntPtr> TaskbarWindows()
     {
-        var main = Native.FindWindow("Shell_TrayWnd", null);
-        if (main != IntPtr.Zero) yield return main;
-        var h = IntPtr.Zero;
-        while ((h = Native.FindWindowEx(IntPtr.Zero, h, "Shell_SecondaryTrayWnd", null)) != IntPtr.Zero) yield return h;
+        // Our own tray service also owns a "Shell_TrayWnd" (see Tray), which has to stay untouched.
+        foreach (var cls in new[] { "Shell_TrayWnd", "Shell_SecondaryTrayWnd" })
+        {
+            var h = IntPtr.Zero;
+            while ((h = Native.FindWindowEx(IntPtr.Zero, h, cls, null)) != IntPtr.Zero)
+            {
+                Win32.GetWindowThreadProcessId(h, out var pid);
+                if (pid != (uint)Environment.ProcessId) yield return h;
+            }
+        }
     }
 }

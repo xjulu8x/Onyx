@@ -51,6 +51,28 @@ public partial class TaskbarWindow : Window
         Bg.Background = new SolidColorBrush(Settings.ToColor(Settings.Current.TaskbarColor, alpha, Color.FromRgb(0x06, 0x06, 0x08)));
     }
 
+    // ---------- notification area ----------
+
+    private const int MaxTrayIcons = 8; // more go behind the arrow, so the bar stays tidy
+
+    public void StartTray()
+    {
+        Tray.Changed += () => Dispatcher.BeginInvoke(RebuildTray);
+        Tray.Start();
+        RebuildTray();
+    }
+
+    private void RebuildTray()
+    {
+        TrayPanel.Children.Clear();
+        var icons = Tray.Visible();
+        foreach (var icon in icons.Take(MaxTrayIcons)) TrayPanel.Children.Add(Tray.Button(icon));
+        if (icons.Count <= MaxTrayIcons) return;
+        var more = new Button { Style = (Style)FindResource("TrayButton"), Content = "", FontSize = 11, ToolTip = "Weitere Symbole" };
+        more.Click += (_, _) => Flyout.Toggle(FlyoutKind.Tray);
+        TrayPanel.Children.Add(more);
+    }
+
     // ---------- auto-hide ----------
 
     private DispatcherTimer _autoHideTimer;
