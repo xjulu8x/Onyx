@@ -28,7 +28,7 @@ public partial class IslandWindow : Window
     {
         InitializeComponent();
         Native.MakeOverlay(this, desktopLevel: false);
-        Loaded += (_, _) => { ApplyLook(); _surface.SetVisible(true); _surface.Raise(); Native.BringTopmost(this); };
+        Loaded += (_, _) => { ApplyLook(); _surface.SetVisible(true); KeepOnTop(); };
 
         _collapseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) }; // short grace period against accidental mouse-outs
         _collapseTimer.Tick += (_, _) => { _collapseTimer.Stop(); if (!_hovering && !_menuOpen && !Settings.Current.AlwaysExpanded) SetExpanded(false); };
@@ -56,6 +56,14 @@ public partial class IslandWindow : Window
     // ---------- expand / collapse ----------
 
     public void ForceExpand() => SetExpanded(true, animate: false);
+
+    /// <summary>Debug aid for --demo: opens and closes by itself, so the motion can be recorded.</summary>
+    public async void Demo()
+    {
+        await Task.Delay(5000);
+        for (int i = 0; i < 6; i++) { SetExpanded(i % 2 == 0); await Task.Delay(1000); }
+        ((App)Application.Current).Quit();
+    }
     public void ApplyAlwaysExpanded() => SetExpanded(Settings.Current.AlwaysExpanded || _hovering);
 
     private void SetExpanded(bool expand, bool animate = true)
@@ -66,17 +74,17 @@ public partial class IslandWindow : Window
         double k = animate ? Theme.Speed : 0;
         UpdateSurface(animate && k > 0);
         if (expand) SizeContent();
-        var hide = new DoubleAnimation(0, TimeSpan.FromMilliseconds(90 * k)) { EasingFunction = FadeEase };
+        var hide = new DoubleAnimation(0, TimeSpan.FromMilliseconds(80 * k)) { EasingFunction = FadeEase };
         if (expand)
         {
             Compact.BeginAnimation(OpacityProperty, hide);
-            Animate(Expanded, OpacityProperty, 1, TimeSpan.FromMilliseconds(190 * k), FadeEase, 80 * k);
+            Animate(Expanded, OpacityProperty, 1, TimeSpan.FromMilliseconds(220 * k), FadeEase, 120 * k); // only once the body has room for it
         }
         else
         {
             hide.Completed += (_, _) => { if (!_expanded) SizeContent(); };
             Expanded.BeginAnimation(OpacityProperty, hide);
-            Animate(Compact, OpacityProperty, 1, TimeSpan.FromMilliseconds(160 * k), FadeEase, 110 * k);
+            Animate(Compact, OpacityProperty, 1, TimeSpan.FromMilliseconds(160 * k), FadeEase, 140 * k);
         }
         Expanded.IsHitTestVisible = expand;
         ShowEqualizer();
@@ -104,6 +112,13 @@ public partial class IslandWindow : Window
         _surface.MoveTo((float)((_expanded ? ExpandedW : CompactW) * k), (float)((height + (docked ? radius : 0)) * k), (float)((docked ? -radius : 8) * k), (float)(radius * k), _expanded, animate);
     }
 
+    // The content goes on top first, then the body right below it, so the body never covers the content, not even for a moment.
+    private void KeepOnTop()
+    {
+        Native.BringTopmost(this);
+        _surface.PlaceBelow(new System.Windows.Interop.WindowInteropHelper(this).Handle);
+    }
+
     private void ShowEqualizer()
     {
         var s = Settings.Current;
@@ -127,6 +142,7 @@ public partial class IslandWindow : Window
         // Form: 0 floating, 1 docked to the top edge, 2 capsule (narrower and taller, round cover)
         Island.Margin = new Thickness(0, s.IslandShape == 1 ? 0 : 8, 0, 0);
         Compact.Height = CompactH;
+        Compact.Width = CompactW - 24;
         CompactArt.Width = CompactArt.Height = Capsule ? 28 : 22;
         CompactArt.CornerRadius = new CornerRadius(Capsule ? 14 : 6);
         SizeContent();
@@ -240,7 +256,7 @@ public partial class IslandWindow : Window
         _tick++;
         if (_expanded) UpdateProgress();
         if (!_media.HasSession && _heatText == null) CompactTitle.Text = DateTime.Now.ToString("HH:mm");
-        if (_tick % 8 == 0) { _surface.Raise(); Native.BringTopmost(this); }
+        if (_tick % 8 == 0) KeepOnTop();
     }
 
     // ---------- media / volume ----------

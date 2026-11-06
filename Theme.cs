@@ -132,7 +132,7 @@ internal static class Theme
     public static (float Damping, TimeSpan Period) Spring(bool open)
     {
         double fast = Settings.Current.AnimationSpeed == 0 ? 0.7 : 1;
-        var (damping, ms) = !open ? (1f, 42.0) : Settings.Current.MotionStyle switch { 1 => (0.62f, 62.0), 2 => (1f, 38.0), _ => (0.8f, 58.0) };
+        var (damping, ms) = !open ? (1f, 85.0) : Settings.Current.MotionStyle switch { 1 => (0.66f, 125.0), 2 => (1f, 70.0), _ => (0.82f, 120.0) };
         return (damping, TimeSpan.FromMilliseconds(ms * fast));
     }
 

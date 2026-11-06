@@ -68,6 +68,7 @@ public partial class App : Application
         Theme.StartAutoTheme();
 
         if (e.Args.Contains("--probe")) Probe();
+        if (e.Args.Contains("--demo")) Island.Demo();
         var snap = Array.IndexOf(e.Args, "--snapshot");
         if (snap >= 0 && snap + 1 < e.Args.Length) Snapshot(e.Args[snap + 1], e.Args.Contains("tray") ? FlyoutKind.Tray : FlyoutKind.ActionCenter);
     }

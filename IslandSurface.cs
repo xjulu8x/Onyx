@@ -43,11 +43,11 @@ internal sealed class IslandSurface
     private readonly SpriteVisual _tint, _glow;
     private readonly ContainerVisual _equalizer;
     private readonly SpriteVisual[] _bars = new SpriteVisual[4];
-    private bool _barsMoving;
+    private bool _barsMoving, _barsStarted, _barsVisible = true;
     private readonly CompositionRoundedRectangleGeometry _shape;
     private readonly CompositionSpriteShape _rim;
     private readonly bool _blur;
-    private readonly DispatcherTimer _settle = new() { Interval = TimeSpan.FromMilliseconds(520) };
+    private readonly DispatcherTimer _settle = new() { Interval = TimeSpan.FromMilliseconds(800) };
     private int _width, _height;
     private Vector2 _size;
     private float _top;
@@ -147,8 +147,8 @@ internal sealed class IslandSurface
 
     public void SetVisible(bool visible) => ShowWindow(_window.Handle, visible ? 4 /* SW_SHOWNOACTIVATE */ : 0);
 
-    /// <summary>Keeps the surface directly below the content window, which is raised right after this.</summary>
-    public void Raise() => Native.SetWindowPos(_window.Handle, Native.HWND_TOPMOST, 0, 0, 0, 0, Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+    /// <summary>Keeps the surface directly below the content window.</summary>
+    public void PlaceBelow(IntPtr content) => Native.SetWindowPos(_window.Handle, content, 0, 0, 0, 0, Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
 
     /// <summary>Tint and edge. With real blur behind it the tint can be lighter.</summary>
     public void SetLook(System.Windows.Media.Color tint, double opacity, System.Windows.Media.Color? rim)
@@ -168,10 +168,15 @@ internal sealed class IslandSurface
     public void SetEqualizer(bool playing, bool visible, float scale, float x, float y)
     {
         _equalizer.Offset = new Vector3(x, y, 0);
-        var fade = _compositor.CreateScalarKeyFrameAnimation();
-        fade.InsertKeyFrame(1, visible ? 1 : 0);
-        fade.Duration = TimeSpan.FromMilliseconds(visible ? 220 : 90);
-        _equalizer.StartAnimation("Opacity", fade);
+        if (visible != _barsVisible)
+        {
+            _barsVisible = visible;
+            var fade = _compositor.CreateScalarKeyFrameAnimation();
+            fade.InsertKeyFrame(1, visible ? 1 : 0);
+            fade.Duration = TimeSpan.FromMilliseconds(visible ? 220 : 90);
+            if (visible) fade.DelayTime = TimeSpan.FromMilliseconds(140);
+            _equalizer.StartAnimation("Opacity", fade);
+        }
 
         for (int i = 0; i < _bars.Length; i++)
         {
@@ -181,7 +186,8 @@ internal sealed class IslandSurface
             bar.CenterPoint = new Vector3(1.5f * scale, 7 * scale, 0);
         }
         bool move = playing && visible;
-        if (move == _barsMoving) { if (!move) foreach (var b in _bars) b.Scale = new Vector3(1, 0.2f, 1); return; }
+        if (move == _barsMoving && _barsStarted) return;
+        _barsStarted = true;
         _barsMoving = move;
         for (int i = 0; i < _bars.Length; i++)
         {
@@ -239,6 +245,6 @@ internal sealed class IslandSurface
     {
         int w = (int)(_size.X + 2 * margin), h = (int)(_size.Y + _top + margin);
         int left = (_width - w) / 2;
-        SetWindowRgn(_window.Handle, CreateRectRgn(left, 0, left + w, h), true);
+        SetWindowRgn(_window.Handle, CreateRectRgn(left, 0, left + w, h), false);
     }
 }

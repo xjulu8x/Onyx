@@ -13,7 +13,7 @@
                 MouseEnter="Island_MouseEnter" MouseLeave="Island_MouseLeave" MouseRightButtonUp="Island_RightClick">
             <Grid>
                 <!-- Compact pill -->
-                <Grid x:Name="Compact" Height="34" VerticalAlignment="Top" Margin="12,0">
+                <Grid x:Name="Compact" Height="34" Width="216" VerticalAlignment="Top" HorizontalAlignment="Center">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
