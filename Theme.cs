@@ -41,7 +41,14 @@ internal static class Theme
     public static Brush Surface(string hex, byte alpha)
     {
         var color = Settings.ToColor(hex, alpha, Color.FromRgb(0x06, 0x06, 0x08));
-        if (!Settings.Current.Grain) return new SolidColorBrush(color);
+        if (!Settings.Current.Grain)
+        {
+            // Dark glass: a touch lighter at the top, like light falling on it.
+            var top = Color.FromArgb(color.A, (byte)Math.Min(255, color.R + 22), (byte)Math.Min(255, color.G + 22), (byte)Math.Min(255, color.B + 24));
+            var glass = new LinearGradientBrush(top, color, 90);
+            glass.Freeze();
+            return glass;
+        }
         const int size = 128;
         var random = new Random(7); // same pattern every time
         var px = new byte[size * size * 4];
@@ -121,15 +128,13 @@ internal static class Theme
 
     // ---------- motion ----------
 
-    /// <summary>Opening curve of the island: soft, springy or direct.</summary>
-    public static IEasingFunction OpenEase => Settings.Current.MotionStyle switch
+    /// <summary>Spring of the island: opening follows the chosen style, closing settles without bouncing.</summary>
+    public static (float Damping, TimeSpan Period) Spring(bool open)
     {
-        1 => new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.55 },
-        2 => new CubicEase { EasingMode = EasingMode.EaseOut },
-        _ => new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.18 },
-    };
-
-    public static double MotionLength => Settings.Current.MotionStyle switch { 1 => 1.15, 2 => 0.6, _ => 1 };
+        double fast = Settings.Current.AnimationSpeed == 0 ? 0.7 : 1;
+        var (damping, ms) = !open ? (1f, 42.0) : Settings.Current.MotionStyle switch { 1 => (0.62f, 62.0), 2 => (1f, 38.0), _ => (0.8f, 58.0) };
+        return (damping, TimeSpan.FromMilliseconds(ms * fast));
+    }
 
     // ---------- own themes ----------
 

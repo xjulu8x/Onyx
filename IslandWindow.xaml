@@ -8,11 +8,8 @@
         FontFamily="{DynamicResource Ui}" Foreground="White"
         TextOptions.TextFormattingMode="Display">
     <Grid x:Name="IslandRoot">
-        <!-- The ears only show in the docked form, where they curve the island into the screen edge -->
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Top">
-        <Path x:Name="EarLeft" Width="16" Height="16" VerticalAlignment="Top" Data="M0,0 L16,0 L16,16 Q16,0 0,0 Z" Visibility="Collapsed"/>
         <Border x:Name="Island" Width="240" Height="34" HorizontalAlignment="Center" VerticalAlignment="Top"
-                Background="#F7060608" CornerRadius="17" Margin="0,8,0,0" ClipToBounds="True"
+                Background="#01000000" CornerRadius="17" Margin="0,8,0,0" ClipToBounds="True"
                 MouseEnter="Island_MouseEnter" MouseLeave="Island_MouseLeave" MouseRightButtonUp="Island_RightClick">
             <Grid>
                 <!-- Compact pill -->
@@ -28,12 +25,8 @@
                     </Border>
                     <TextBlock x:Name="CompactTitle" Grid.Column="1" Margin="9,0" VerticalAlignment="Center"
                                FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Height="14">
-                        <Rectangle x:Name="Eq1" Width="3" Height="14" RadiusX="1.5" RadiusY="1.5" Fill="White" Margin="1,0" RenderTransformOrigin="0.5,0.5"><Rectangle.RenderTransform><ScaleTransform ScaleY="0.3"/></Rectangle.RenderTransform></Rectangle>
-                        <Rectangle x:Name="Eq2" Width="3" Height="14" RadiusX="1.5" RadiusY="1.5" Fill="White" Margin="1,0" RenderTransformOrigin="0.5,0.5"><Rectangle.RenderTransform><ScaleTransform ScaleY="0.3"/></Rectangle.RenderTransform></Rectangle>
-                        <Rectangle x:Name="Eq3" Width="3" Height="14" RadiusX="1.5" RadiusY="1.5" Fill="White" Margin="1,0" RenderTransformOrigin="0.5,0.5"><Rectangle.RenderTransform><ScaleTransform ScaleY="0.3"/></Rectangle.RenderTransform></Rectangle>
-                        <Rectangle x:Name="Eq4" Width="3" Height="14" RadiusX="1.5" RadiusY="1.5" Fill="White" Margin="1,0" RenderTransformOrigin="0.5,0.5"><Rectangle.RenderTransform><ScaleTransform ScaleY="0.3"/></Rectangle.RenderTransform></Rectangle>
-                    </StackPanel>
+                    <!-- Room for the equalizer, which the surface draws on the GPU -->
+                    <Border Grid.Column="2" Width="24"/>
                 </Grid>
 
                 <!-- Expanded panel (fixed size so nothing reflows while the island animates) -->
@@ -96,11 +89,7 @@
                         </Grid>
                     </Grid>
                 </Grid>
-                <!-- Music glow: only its opacity changes -->
-                <Border x:Name="GlowBar" Height="18" VerticalAlignment="Bottom" Opacity="0" IsHitTestVisible="False"/>
             </Grid>
         </Border>
-        <Path x:Name="EarRight" Width="16" Height="16" VerticalAlignment="Top" Data="M16,0 L0,0 L0,16 Q0,0 16,0 Z" Visibility="Collapsed"/>
-        </StackPanel>
     </Grid>
 </Window>

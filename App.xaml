@@ -6,6 +6,11 @@
         <FontFamily x:Key="Icons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
         <FontFamily x:Key="Ui">Segoe UI Variable Display, Segoe UI</FontFamily>
         <SolidColorBrush x:Key="Dim" Color="#A6FFFFFF"/>
+        <!-- Dark glass of popups and the start menu: slightly lighter at the top, like light from above -->
+        <LinearGradientBrush x:Key="GlassPanel" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#F21E1E24" Offset="0"/>
+            <GradientStop Color="#F2090A0D" Offset="0.5"/>
+        </LinearGradientBrush>
         <SolidColorBrush x:Key="Track" Color="#33FFFFFF"/>
 
         <Style x:Key="IconButton" TargetType="Button">

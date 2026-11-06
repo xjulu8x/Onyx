@@ -15,20 +15,12 @@ public partial class IslandWindow : Window
     private static double CompactH => Capsule ? 40 : 34;
     private static double CompactRadius => CompactH / 2;
     private static readonly IEasingFunction Ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-    // Closing starts quickly and settles softly (ease-out), so it feels responsive without snapping shut.
-    private static readonly IEasingFunction CloseEase = new QuarticEase { EasingMode = EasingMode.EaseOut };
     private static readonly IEasingFunction FadeEase = new QuadraticEase { EasingMode = EasingMode.EaseOut };
-
-    public static readonly DependencyProperty RadiusProperty = DependencyProperty.Register(
-        nameof(Radius), typeof(double), typeof(IslandWindow),
-        new PropertyMetadata(17.0, (d, e) => ((IslandWindow)d).SetCorners((double)e.NewValue)));
-
-    public double Radius { get => (double)GetValue(RadiusProperty); set => SetValue(RadiusProperty, value); }
 
     private readonly SystemMonitor _sys = SystemMonitor.Instance;
     private readonly MediaService _media = MediaService.Instance;
     private readonly DispatcherTimer _collapseTimer;
-    private readonly Random _rnd = new();
+    private readonly IslandSurface _surface = new();
     private bool _expanded, _hovering, _menuOpen;
     private int _tick;
 
@@ -36,14 +28,14 @@ public partial class IslandWindow : Window
     {
         InitializeComponent();
         Native.MakeOverlay(this, desktopLevel: false);
-        Loaded += (_, _) => Left = (SystemParameters.PrimaryScreenWidth - Width) / 2;
+        Loaded += (_, _) => { ApplyLook(); _surface.SetVisible(true); _surface.Raise(); Native.BringTopmost(this); };
 
         _collapseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) }; // short grace period against accidental mouse-outs
         _collapseTimer.Tick += (_, _) => { _collapseTimer.Stop(); if (!_hovering && !_menuOpen && !Settings.Current.AlwaysExpanded) SetExpanded(false); };
 
         _sys.Updated += CheckHeat;
         _media.Updated += UpdateMedia;
-        TaskbarWindow.FullscreenChanged += full => { if (full) Hide(); else Show(); };
+        TaskbarWindow.FullscreenChanged += full => { if (full) Hide(); else Show(); _surface.SetVisible(!full); };
         VolSlider.Changed += (v, muted) =>
         {
             VolText.Text = $"{v * 100:0}%";
@@ -69,63 +61,83 @@ public partial class IslandWindow : Window
     private void SetExpanded(bool expand, bool animate = true)
     {
         _expanded = expand;
-        double k = animate ? Theme.Speed * Theme.MotionLength : 0;
-        var size = TimeSpan.FromMilliseconds((expand ? 460 : 300) * k);
-        var ease = expand ? Theme.OpenEase : CloseEase;
-
-        Animate(Island, WidthProperty, expand ? ExpandedW : CompactW, size, ease);
-        Animate(Island, HeightProperty, expand ? ExpandedH : CompactH, size, ease);
-        Animate(this, RadiusProperty, (expand ? 28 : CompactRadius) * Settings.Current.IslandCorners, size, ease);
-
-        // The content sits at its final position from the start and is revealed by the growing island (clipped),
-        // with only a short fade. No per-frame scaling: that re-renders the whole transparent window and stutters.
-        Animate(Expanded, OpacityProperty, expand ? 1 : 0, TimeSpan.FromMilliseconds((expand ? 200 : 110) * k), FadeEase);
-        Animate(Compact, OpacityProperty, expand ? 0 : 1, TimeSpan.FromMilliseconds((expand ? 140 : 220) * k), FadeEase, expand ? 0 : 130 * k);
+        // Choreography: the body moves on the GPU at once; the content only fades, a beat later when opening
+        // and first thing when closing, so it never has to follow the moving edge.
+        double k = animate ? Theme.Speed : 0;
+        UpdateSurface(animate && k > 0);
+        if (expand) SizeContent();
+        var hide = new DoubleAnimation(0, TimeSpan.FromMilliseconds(90 * k)) { EasingFunction = FadeEase };
+        if (expand)
+        {
+            Compact.BeginAnimation(OpacityProperty, hide);
+            Animate(Expanded, OpacityProperty, 1, TimeSpan.FromMilliseconds(190 * k), FadeEase, 80 * k);
+        }
+        else
+        {
+            hide.Completed += (_, _) => { if (!_expanded) SizeContent(); };
+            Expanded.BeginAnimation(OpacityProperty, hide);
+            Animate(Compact, OpacityProperty, 1, TimeSpan.FromMilliseconds(160 * k), FadeEase, 110 * k);
+        }
         Expanded.IsHitTestVisible = expand;
+        ShowEqualizer();
         // The open page (player or settings) is kept, so hovering again continues where the user left off.
         if (expand) VolSlider.Refresh();
     }
 
     private void Settings_Click(object sender, RoutedEventArgs e) => ((App)Application.Current).OpenSettings();
 
-    private void ApplyColor()
+    /// <summary>The content layer is only as large as the island: it receives the mouse and clips the content.</summary>
+    private void SizeContent()
     {
-        Island.Background = Theme.Surface(_heatText != null ? "#5A1010" : Settings.Current.IslandColor, (byte)Math.Round(255 * Settings.Current.IslandOpacity));
-        EarLeft.Fill = EarRight.Fill = Island.Background;
-        var (rim, width) = Theme.Rim(subtle: false);
-        Island.BorderBrush = rim;
-        Island.BorderThickness = new Thickness(width);
+        Island.Width = _expanded ? ExpandedW : CompactW;
+        Island.Height = _expanded ? ExpandedH : CompactH;
     }
 
-    private void SetCorners(double r) =>
-        Island.CornerRadius = Settings.Current.IslandShape == 1 ? new CornerRadius(0, 0, r, r) : new CornerRadius(r);
+    private void UpdateSurface(bool animate)
+    {
+        var s = Settings.Current;
+        double k = VisualTreeHelper.GetDpi(this).DpiScaleX * s.IslandScale;
+        double radius = (_expanded ? 28 : CompactRadius) * s.IslandCorners;
+        double height = _expanded ? ExpandedH : CompactH;
+        // Docked: the upper corners sit above the screen edge, so only the lower ones show.
+        bool docked = s.IslandShape == 1;
+        _surface.MoveTo((float)((_expanded ? ExpandedW : CompactW) * k), (float)((height + (docked ? radius : 0)) * k), (float)((docked ? -radius : 8) * k), (float)(radius * k), _expanded, animate);
+    }
 
-    /// <summary>Color, size and rounding from the design settings. The scale is static, so the expand animation stays as cheap as before.</summary>
+    private void ShowEqualizer()
+    {
+        var s = Settings.Current;
+        double k = VisualTreeHelper.GetDpi(this).DpiScaleX * s.IslandScale;
+        double corner = s.IslandShape == 1 ? CompactRadius * s.IslandCorners : 0;
+        _surface.SetEqualizer(_media.IsPlaying, !_expanded, (float)k, (float)((CompactW - 36) * k), (float)((corner + (CompactH - 14) / 2) * k));
+    }
+
+    private void ApplyColor()
+    {
+        var s = Settings.Current;
+        var tint = Settings.ToColor(_heatText != null ? "#5A1010" : s.IslandColor, 0xFF, Color.FromRgb(0x06, 0x06, 0x08));
+        _surface.SetLook(tint, s.IslandOpacity, s.RimStyle >= 2 ? Theme.Accent : null);
+    }
+
+    /// <summary>Color, size and shape from the design settings.</summary>
     public void ApplyLook()
     {
         var s = Settings.Current;
         ApplyColor();
         // Form: 0 floating, 1 docked to the top edge, 2 capsule (narrower and taller, round cover)
-        bool docked = s.IslandShape == 1;
-        Island.Margin = new Thickness(0, docked ? 0 : 8, 0, 0);
-        EarLeft.Visibility = EarRight.Visibility = docked ? Visibility.Visible : Visibility.Collapsed;
-        EarLeft.Fill = EarRight.Fill = Island.Background;
+        Island.Margin = new Thickness(0, s.IslandShape == 1 ? 0 : 8, 0, 0);
         Compact.Height = CompactH;
         CompactArt.Width = CompactArt.Height = Capsule ? 28 : 22;
         CompactArt.CornerRadius = new CornerRadius(Capsule ? 14 : 6);
-        if (!_expanded)
-        {
-            Island.BeginAnimation(WidthProperty, null);
-            Island.BeginAnimation(HeightProperty, null);
-            Island.Width = CompactW;
-            Island.Height = CompactH;
-        }
+        SizeContent();
         IslandRoot.LayoutTransform = new ScaleTransform(s.IslandScale, s.IslandScale);
         Width = 560 * s.IslandScale;
         Height = 210 * s.IslandScale;
         Left = (SystemParameters.PrimaryScreenWidth - Width) / 2;
-        BeginAnimation(RadiusProperty, null);
-        Radius = (_expanded ? 28 : CompactRadius) * s.IslandCorners;
+        double dpi = VisualTreeHelper.GetDpi(this).DpiScaleX;
+        _surface.Place((int)(Left * dpi), 0, (int)(Width * dpi), (int)(Height * dpi));
+        UpdateSurface(animate: false);
+        ShowEqualizer();
         ApplyGlow();
     }
 
@@ -165,6 +177,7 @@ public partial class IslandWindow : Window
         CompactArt.Background = art != null ? new ImageBrush(art) { Stretch = Stretch.UniformToFill } : new SolidColorBrush(Color.FromArgb(0x22, 255, 255, 255));
         ArtIcon.Visibility = CompactArtIcon.Visibility = art == null ? Visibility.Visible : Visibility.Collapsed;
         if (!ReferenceEquals(art, _glowArt)) { _glowArt = art; ApplyGlow(); }
+        ShowEqualizer();
         UpdateProgress();
     }
 
@@ -182,8 +195,8 @@ public partial class IslandWindow : Window
     {
         int mode = Settings.Current.MusicGlow;
         var color = mode == 2 && _media.Art is System.Windows.Media.Imaging.BitmapSource art ? Theme.CoverColor(art) : Theme.Accent;
-        GlowBar.Background = new LinearGradientBrush(Color.FromArgb(0, color.R, color.G, color.B), color, 90);
-        if (mode == 0) { _glowTimer.Stop(); GlowBar.Opacity = 0; }
+        _surface.SetGlowColor(color);
+        if (mode == 0) { _glowTimer.Stop(); _surface.SetGlow(0); }
         else _glowTimer.Start();
     }
 
@@ -192,8 +205,7 @@ public partial class IslandWindow : Window
         // Falls off gently, so it pulses with the beat instead of flickering.
         double peak = IsVisible && _media.IsPlaying ? Volume.Peak() : 0;
         _glowLevel = Math.Max(peak, _glowLevel * 0.82);
-        double opacity = Math.Round(Math.Min(0.9, _glowLevel * 1.3), 2);
-        if (opacity != GlowBar.Opacity) GlowBar.Opacity = opacity;
+        _surface.SetGlow((float)Math.Min(0.9, _glowLevel * 1.3));
     }
 
     // ---------- heat alarm ----------
@@ -226,22 +238,9 @@ public partial class IslandWindow : Window
     private void FastTick()
     {
         _tick++;
-        // Idle (collapsed, nothing playing): skip the per-frame work and only keep the clock fresh.
-        bool idle = !_expanded && !_media.IsPlaying;
-        if (!idle || _tick % 4 == 0) UpdateProgress();
-        if (_media.IsPlaying || _tick % 4 == 0) AnimateEq();
+        if (_expanded) UpdateProgress();
         if (!_media.HasSession && _heatText == null) CompactTitle.Text = DateTime.Now.ToString("HH:mm");
-        if (_tick % 8 == 0) Native.BringTopmost(this);
-    }
-
-    private void AnimateEq()
-    {
-        foreach (var r in new[] { Eq1, Eq2, Eq3, Eq4 })
-        {
-            double to = _media.IsPlaying ? 0.25 + _rnd.NextDouble() * 0.75 : 0.2;
-            ((ScaleTransform)r.RenderTransform).BeginAnimation(ScaleTransform.ScaleYProperty,
-                new DoubleAnimation(to, TimeSpan.FromMilliseconds(240)) { EasingFunction = Ease });
-        }
+        if (_tick % 8 == 0) { _surface.Raise(); Native.BringTopmost(this); }
     }
 
     // ---------- media / volume ----------

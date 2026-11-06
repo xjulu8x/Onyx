@@ -38,7 +38,7 @@
         </Style>
     </Window.Resources>
 
-    <Border x:Name="Panel" Margin="10" CornerRadius="24" Background="#FA060608" BorderBrush="#24FFFFFF" BorderThickness="1"
+    <Border x:Name="Panel" Margin="10" CornerRadius="24" Background="{StaticResource GlassPanel}" BorderBrush="#24FFFFFF" BorderThickness="1"
             Padding="18">
         <Border.RenderTransform>
             <TranslateTransform x:Name="Slide" Y="24"/>
