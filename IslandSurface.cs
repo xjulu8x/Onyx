@@ -24,6 +24,21 @@ internal sealed class IslandSurface
         void EnsureOnThread(uint threadId);
     }
 
+    [ComImport, Guid("25297D5C-3AD4-4C9C-B5CF-E36A38512330"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface ICompositorInterop
+    {
+        void CreateCompositionSurfaceForHandle(IntPtr handle, out IntPtr result);
+        void CreateCompositionSurfaceForSwapChain(IntPtr swapChain, out IntPtr result);
+        void CreateGraphicsDevice(IntPtr renderingDevice, out IntPtr result);
+    }
+
+    [ComImport, Guid("FD04E6E3-FE0C-4C3C-AB19-A07601A576EE"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface ICompositionDrawingSurfaceInterop
+    {
+        void BeginDraw(IntPtr updateRect, ref Guid iid, out IntPtr updateObject, out Native.POINT offset);
+        void EndDraw();
+    }
+
     [StructLayout(LayoutKind.Sequential)] private struct QueueOptions { public int Size, ThreadType, ApartmentType; }
     [StructLayout(LayoutKind.Sequential)] private struct AccentPolicy { public int AccentState, AccentFlags; public uint Color; public int AnimationId; }
     [StructLayout(LayoutKind.Sequential)] private struct CompositionData { public int Attribute; public IntPtr Data; public int Size; }
@@ -41,6 +56,13 @@ internal sealed class IslandSurface
     private readonly DesktopWindowTarget _target; // the visuals disappear if this is collected
     private readonly ContainerVisual _pill;
     private readonly SpriteVisual _tint, _glow;
+    private readonly SpriteVisual _art, _smallText, _bigText;
+    private Vortice.Direct3D11.ID3D11Device _device; // kept alive with the images
+    private Vortice.Direct3D11.ID3D11DeviceContext _context;
+    private CompositionGraphicsDevice _graphics;
+
+    /// <summary>False when images can't reach the GPU here; the WPF layer then shows cover and title itself.</summary>
+    public bool MediaReady { get; }
     private readonly ContainerVisual _equalizer;
     private readonly SpriteVisual[] _bars = new SpriteVisual[4];
     private bool _barsMoving, _barsStarted, _barsVisible = true;
@@ -83,7 +105,7 @@ internal sealed class IslandSurface
         _pill.Children.InsertAtTop(_tint);
 
         var sheen = _compositor.CreateSpriteVisual();
-        sheen.Brush = Gradient(Color.FromArgb(0x22, 255, 255, 255), Color.FromArgb(0, 255, 255, 255), 0.55f);
+        sheen.Brush = Gradient(Color.FromArgb(0x12, 255, 255, 255), Color.FromArgb(0, 255, 255, 255), 0.5f);
         sheen.RelativeSizeAdjustment = Vector2.One;
         _pill.Children.InsertAtTop(sheen);
 
@@ -102,6 +124,13 @@ internal sealed class IslandSurface
             _equalizer.Children.InsertAtTop(_bars[i]);
         }
 
+        _art = _compositor.CreateSpriteVisual();
+        _smallText = _compositor.CreateSpriteVisual();
+        _bigText = _compositor.CreateSpriteVisual();
+        _bigText.Opacity = 0;
+        foreach (var part in new[] { _art, _smallText, _bigText }) _pill.Children.InsertAtTop(part);
+        MediaReady = StartGraphics();
+
         _shape = _compositor.CreateRoundedRectangleGeometry();
         _pill.Clip = _compositor.CreateGeometricClip(_shape);
 
@@ -113,6 +142,91 @@ internal sealed class IslandSurface
         _pill.Children.InsertAtTop(edge);
 
         _settle.Tick += (_, _) => { _settle.Stop(); ClipToPill(0); };
+    }
+
+    private bool StartGraphics()
+    {
+        try
+        {
+            var result = Vortice.Direct3D11.D3D11.D3D11CreateDevice(null, Vortice.Direct3D.DriverType.Hardware, Vortice.Direct3D11.DeviceCreationFlags.BgraSupport,
+                null, out _device, out _context);
+            if (result.Failure) return false;
+            _compositor.As<ICompositorInterop>().CreateGraphicsDevice(_device.NativePointer, out var raw);
+            _graphics = CompositionGraphicsDevice.FromAbi(raw);
+            return true;
+        }
+        catch { return false; }
+    }
+
+    private CompositionSurfaceBrush Upload(System.Windows.Media.Imaging.BitmapSource image)
+    {
+        int width = image.PixelWidth, height = image.PixelHeight, stride = width * 4;
+        var pixels = new byte[stride * height];
+        image.CopyPixels(pixels, stride, 0);
+        var surface = _graphics.CreateDrawingSurface(new Windows.Foundation.Size(width, height), Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized, Windows.Graphics.DirectX.DirectXAlphaMode.Premultiplied);
+        var drawing = surface.As<ICompositionDrawingSurfaceInterop>();
+        var iid = typeof(Vortice.Direct3D11.ID3D11Texture2D).GUID;
+        drawing.BeginDraw(IntPtr.Zero, ref iid, out var texture, out var at);
+        using (var target = new Vortice.Direct3D11.ID3D11Texture2D(texture))
+            _context.UpdateSubresource(pixels, target, 0, (uint)stride, 0, new Vortice.Mathematics.Box(at.X, at.Y, 0, at.X + width, at.Y + height, 1));
+        drawing.EndDraw();
+        var brush = _compositor.CreateSurfaceBrush(surface);
+        brush.Stretch = CompositionStretch.Fill;
+        return brush;
+    }
+
+    /// <summary>New cover and texts; null keeps the current image.</summary>
+    public void SetMedia(System.Windows.Media.Imaging.BitmapSource art, System.Windows.Media.Imaging.BitmapSource small, System.Windows.Media.Imaging.BitmapSource big)
+    {
+        if (!MediaReady) return;
+        if (art != null) _art.Brush = Upload(art);
+        if (small != null) { _smallText.Brush = Upload(small); _smallText.Size = new Vector2(small.PixelWidth, small.PixelHeight) * _textScale; }
+        if (big != null) { _bigText.Brush = Upload(big); _bigText.Size = new Vector2(big.PixelWidth, big.PixelHeight) * _textScale; }
+    }
+
+    private float _textScale = 0.5f;
+
+    /// <summary>Device pixels per image pixel of the texts.</summary>
+    public void SetTextScale(float scale) => _textScale = scale;
+
+    /// <summary>Sends cover and texts to their place: they travel with the body, on the same spring.</summary>
+    public void MoveMedia(Vector2 artAt, float artSize, Vector2 textAt, bool open, bool animate)
+    {
+        if (!MediaReady) return;
+        var (damping, period) = Theme.Spring(open);
+        void Fly(SpriteVisual part, Vector2 at)
+        {
+            var target = new Vector3(at, 0);
+            if (!animate) { part.StopAnimation("Offset"); part.Offset = target; return; }
+            var move = _compositor.CreateSpringVector3Animation();
+            move.DampingRatio = damping; move.Period = period; move.FinalValue = target;
+            part.StartAnimation("Offset", move);
+        }
+        Fly(_art, artAt);
+        Fly(_smallText, textAt);
+        Fly(_bigText, textAt);
+
+        var size = new Vector2(artSize, artSize);
+        if (animate)
+        {
+            var grow = _compositor.CreateSpringVector2Animation();
+            grow.DampingRatio = damping; grow.Period = period; grow.FinalValue = size;
+            _art.StartAnimation("Size", grow);
+        }
+        else { _art.StopAnimation("Size"); _art.Size = size; }
+
+        Fade(_smallText, open ? 0 : 1, animate, open ? 0 : 120, open ? 110 : 180);
+        Fade(_bigText, open ? 1 : 0, animate, open ? 90 : 0, open ? 200 : 110);
+    }
+
+    private void Fade(Visual part, float to, bool animate, int delay, int length)
+    {
+        if (!animate) { part.StopAnimation("Opacity"); part.Opacity = to; return; }
+        var fade = _compositor.CreateScalarKeyFrameAnimation();
+        fade.InsertKeyFrame(1, to);
+        fade.Duration = TimeSpan.FromMilliseconds(length);
+        fade.DelayTime = TimeSpan.FromMilliseconds(delay);
+        part.StartAnimation("Opacity", fade);
     }
 
     private void EnableBackdrop()
@@ -153,7 +267,7 @@ internal sealed class IslandSurface
     /// <summary>Tint and edge. With real blur behind it the tint can be lighter.</summary>
     public void SetLook(System.Windows.Media.Color tint, double opacity, System.Windows.Media.Color? rim)
     {
-        byte alpha = (byte)(255 * opacity * (_blur ? 0.6 : 0.94)); // always a little see-through: that is the glass
+        byte alpha = (byte)(255 * opacity * (_blur ? 0.6 : 0.98)); // always a little see-through: that is the glass
         _tint.Brush = _compositor.CreateColorBrush(Color.FromArgb(alpha, tint.R, tint.G, tint.B));
         var top = rim ?? System.Windows.Media.Color.FromRgb(255, 255, 255);
         _rim.StrokeBrush = Gradient(Color.FromArgb(rim == null ? (byte)0x50 : (byte)0xC0, top.R, top.G, top.B), Color.FromArgb(rim == null ? (byte)0x10 : (byte)0x50, top.R, top.G, top.B));

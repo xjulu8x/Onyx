@@ -73,12 +73,13 @@ public partial class IslandWindow : Window
         // and first thing when closing, so it never has to follow the moving edge.
         double k = animate ? Theme.Speed : 0;
         UpdateSurface(animate && k > 0);
+        MoveMedia(animate && k > 0);
         if (expand) SizeContent();
         var hide = new DoubleAnimation(0, TimeSpan.FromMilliseconds(80 * k)) { EasingFunction = FadeEase };
         if (expand)
         {
             Compact.BeginAnimation(OpacityProperty, hide);
-            Animate(Expanded, OpacityProperty, 1, TimeSpan.FromMilliseconds(220 * k), FadeEase, 120 * k); // only once the body has room for it
+            Animate(Expanded, OpacityProperty, 1, TimeSpan.FromMilliseconds(220 * k), FadeEase, 170 * k); // only once the body has room for it
         }
         else
         {
@@ -119,6 +120,76 @@ public partial class IslandWindow : Window
         _surface.PlaceBelow(new System.Windows.Interop.WindowInteropHelper(this).Handle);
     }
 
+    // ---------- cover and title on the GPU ----------
+
+    private const double TextScale = 2; // images are rendered sharper than shown
+    private string _smallKey, _bigKey;
+    private object _artKey = new();
+
+    /// <summary>Renders what changed into images for the surface. Happens per song, not per frame.</summary>
+    private void SendMedia()
+    {
+        if (!_surface.MediaReady) return;
+        var font = (FontFamily)FindResource("Ui");
+        TextBlock Text(string text, double size, FontWeight weight, double opacity) => new()
+        {
+            Text = text, FontFamily = font, FontSize = size, FontWeight = weight, Foreground = Brushes.White, Opacity = opacity, TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+
+        System.Windows.Media.Imaging.BitmapSource art = null, small = null, big = null;
+        object artKey = (object)_media.Art ?? "none";
+        if (!artKey.Equals(_artKey))
+        {
+            _artKey = artKey;
+            var cover = new Border { Width = 98, Height = 98, CornerRadius = new CornerRadius(16), Background = _media.HasSession && _media.Art != null ? new ImageBrush(_media.Art) { Stretch = Stretch.UniformToFill } : new SolidColorBrush(Color.FromArgb(0x1F, 255, 255, 255)) };
+            if (_media.Art == null) cover.Child = new TextBlock { Text = "", FontFamily = (FontFamily)FindResource("Icons"), FontSize = 30, Foreground = Brushes.White, Opacity = 0.65, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            art = Render(cover, 98, 98);
+        }
+        string smallKey = CompactTitle.Text + font;
+        if (smallKey != _smallKey)
+        {
+            _smallKey = smallKey;
+            small = Render(Text(CompactTitle.Text, 12, FontWeights.SemiBold, 1), CompactW - 24 - 22 - 42, 18);
+        }
+        string bigKey = TitleText.Text + "|" + Artist.Text + font;
+        if (bigKey != _bigKey)
+        {
+            _bigKey = bigKey;
+            var both = new StackPanel();
+            both.Children.Add(Text(TitleText.Text, 14, FontWeights.Bold, 1));
+            var artist = Text(Artist.Text, 11, FontWeights.SemiBold, 0.65);
+            artist.Margin = new Thickness(0, 3, 0, 0);
+            both.Children.Add(artist);
+            big = Render(both, ExpandedW - 126 - 28, 40);
+        }
+        _surface.SetMedia(art, small, big);
+        foreach (var hidden in new UIElement[] { Art, CompactArt, CompactTitle, TitleText, Artist }) hidden.Opacity = 0;
+        ArtIcon.Visibility = CompactArtIcon.Visibility = Visibility.Collapsed;
+    }
+
+    private static System.Windows.Media.Imaging.BitmapSource Render(FrameworkElement element, double width, double height)
+    {
+        element.Measure(new Size(width, height));
+        element.Arrange(new Rect(0, 0, width, height));
+        element.UpdateLayout();
+        var image = new System.Windows.Media.Imaging.RenderTargetBitmap((int)(width * TextScale), (int)(height * TextScale), 96 * TextScale, 96 * TextScale, PixelFormats.Pbgra32);
+        image.Render(element);
+        image.Freeze();
+        return image;
+    }
+
+    private void MoveMedia(bool animate)
+    {
+        var s = Settings.Current;
+        float k = (float)(VisualTreeHelper.GetDpi(this).DpiScaleX * s.IslandScale);
+        float corner = s.IslandShape == 1 ? (float)((_expanded ? 28 : CompactRadius) * s.IslandCorners) : 0;
+        float artSize = _expanded ? 98 : Capsule ? 28 : 22;
+        float artX = _expanded ? 16 : 12, artY = _expanded ? 16 : (float)((CompactH - artSize) / 2);
+        float textX = artX + artSize + (_expanded ? 12 : 9), textY = _expanded ? 16 : (float)((CompactH - 18) / 2);
+        _surface.SetTextScale(k / (float)TextScale);
+        _surface.MoveMedia(new System.Numerics.Vector2(artX * k, (artY + corner) * k), artSize * k, new System.Numerics.Vector2(textX * k, (textY + corner) * k), _expanded, animate);
+    }
+
     private void ShowEqualizer()
     {
         var s = Settings.Current;
@@ -153,6 +224,10 @@ public partial class IslandWindow : Window
         double dpi = VisualTreeHelper.GetDpi(this).DpiScaleX;
         _surface.Place((int)(Left * dpi), 0, (int)(Width * dpi), (int)(Height * dpi));
         UpdateSurface(animate: false);
+        _smallKey = _bigKey = null; // size or font may have changed
+        _artKey = new object();
+        SendMedia();
+        MoveMedia(animate: false);
         ShowEqualizer();
         ApplyGlow();
     }
@@ -193,6 +268,7 @@ public partial class IslandWindow : Window
         CompactArt.Background = art != null ? new ImageBrush(art) { Stretch = Stretch.UniformToFill } : new SolidColorBrush(Color.FromArgb(0x22, 255, 255, 255));
         ArtIcon.Visibility = CompactArtIcon.Visibility = art == null ? Visibility.Visible : Visibility.Collapsed;
         if (!ReferenceEquals(art, _glowArt)) { _glowArt = art; ApplyGlow(); }
+        SendMedia();
         ShowEqualizer();
         UpdateProgress();
     }
