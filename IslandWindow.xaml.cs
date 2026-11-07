@@ -100,6 +100,9 @@ public partial class IslandWindow : Window
             Animate(Compact, OpacityProperty, 1, TimeSpan.FromMilliseconds(120 * k), FadeEase, 90 * k);
         }
         Expanded.IsHitTestVisible = expand;
+        // Cover and title belong to the notch and the start page; the activity page is fresh on every open and freed on close.
+        _surface.ShowMedia(!expand || _page == 0);
+        NotifyPage.Content = expand && _page == 2 ? BuildActivity() : null;
         ShowEqualizer();
         // The open page (player or settings) is kept, so hovering again continues where the user left off.
         if (expand) VolSlider.Refresh();
@@ -143,7 +146,12 @@ public partial class IslandWindow : Window
             var tile = new Border { Background = Card, CornerRadius = new CornerRadius(14), Margin = new Thickness(4), Padding = new Thickness(12, 0, 8, 0), Cursor = Cursors.Hand, Child = row };
             Hover(tile);
             Press(tile);
-            tile.MouseLeftButtonUp += (_, _) => { SetExpanded(false); run(); };
+            tile.MouseLeftButtonUp += async (_, _) =>
+            {
+                SetExpanded(false);
+                await Task.Delay(220); // the panel must be gone before a screenshot or a color is taken
+                run();
+            };
             ToolsGrid.Children.Add(tile);
         }
         ToolsGrid.Margin = new Thickness(-4);
@@ -197,7 +205,7 @@ public partial class IslandWindow : Window
         _surface.ShowMedia(index == 0 || !_expanded);
         if (index == 1) FillTray();
         // Built when opened and dropped on leaving, so notifications and the app list cost nothing in between.
-        NotifyPage.Content = index == 2 ? ((App)Application.Current).Flyout.BuildActivity() : null;
+        NotifyPage.Content = index == 2 ? BuildActivity() : null;
     }
 
     /// <summary>Debug aid for --snapshot: renders each page of the open panel to a PNG file.</summary>
@@ -217,6 +225,14 @@ public partial class IslandWindow : Window
         }
         Island.Background = hitArea;
         ShowPage(0);
+    }
+
+    private static FrameworkElement BuildActivity()
+    {
+        var activity = ((App)Application.Current).Flyout.BuildActivity();
+        // The notch shows the time already, and a clock here would stand still (it only ticks inside the flyout).
+        if (activity is StackPanel { Children.Count: > 2 } list) list.Children.RemoveRange(0, 2);
+        return activity;
     }
 
     private void FillTray()

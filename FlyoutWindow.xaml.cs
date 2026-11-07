@@ -83,7 +83,7 @@ public partial class FlyoutWindow : Window
             ? Math.Min(x - ActualWidth / 2, SystemParameters.PrimaryScreenWidth - ActualWidth - 2)
             : SystemParameters.PrimaryScreenWidth - ActualWidth - 2;
         // Opened from the island: centered below it at the top; otherwise above the taskbar.
-        if (_fromTop) { Left = (SystemParameters.PrimaryScreenWidth - ActualWidth) / 2; Top = 4; return; }
+        if (_fromTop) { Left = (SystemParameters.PrimaryScreenWidth - ActualWidth) / 2; Top = 44; return; } // just below the notch
         Top = Math.Max(SystemParameters.WorkArea.Top, SystemParameters.WorkArea.Bottom - ActualHeight + 4);
     }
 
