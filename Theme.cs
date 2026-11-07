@@ -135,9 +135,10 @@ internal static class Theme
     public static (float Damping, TimeSpan Period) Spring(bool open)
     {
         double fast = Settings.Current.AnimationSpeed == 0 ? 0.7 : 1;
-        // Apple: critically damped by default (no bounce: hovering carries no momentum), quick response.
+        // Apple: sheets and drawers use a little less than critical damping (0.8); 0.88 gets the body to its full size quickly,
+        // so the controls never stand out past it, with an overshoot of only about 1 %.
         // Measured against the reference video: open in about 150-200 ms, close in about 120 ms.
-        var (damping, ms) = !open ? (1f, 48.0) : Settings.Current.MotionStyle switch { 1 => (0.8f, 70.0), 2 => (1f, 45.0), _ => (1f, 62.0) };
+        var (damping, ms) = !open ? (1f, 40.0) : Settings.Current.MotionStyle switch { 1 => (0.75f, 60.0), 2 => (1f, 38.0), _ => (0.88f, 50.0) };
         return (damping, TimeSpan.FromMilliseconds(ms * fast));
     }
 

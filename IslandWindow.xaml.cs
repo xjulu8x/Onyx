@@ -29,6 +29,7 @@ public partial class IslandWindow : Window
     {
         InitializeComponent();
         Native.MakeOverlay(this, desktopLevel: false);
+        new System.Windows.Interop.WindowInteropHelper(this).Owner = _surface.Handle;
         Loaded += (_, _) => { ApplyLook(); _surface.SetVisible(true); KeepOnTop(); };
 
         _collapseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) }; // short grace period against accidental mouse-outs
@@ -65,6 +66,8 @@ public partial class IslandWindow : Window
     {
         await Task.Delay(5000);
         for (int i = 0; i < 6; i++) { SetExpanded(i % 2 == 0); await Task.Delay(1000); }
+        Flash("Caps Lock an");
+        await Task.Delay(1200);
         ((App)Application.Current).Quit();
     }
     public void ApplyAlwaysExpanded() => SetExpanded(Settings.Current.AlwaysExpanded || _hovering);
@@ -86,7 +89,7 @@ public partial class IslandWindow : Window
         if (expand)
         {
             Compact.BeginAnimation(OpacityProperty, hide);
-            Animate(Expanded, OpacityProperty, 1, TimeSpan.FromMilliseconds(150 * k), FadeEase, 40 * k);
+            Animate(Expanded, OpacityProperty, 1, TimeSpan.FromMilliseconds(120 * k), FadeEase, 110 * k); // once the body has nearly reached its size, so nothing floats outside it
             Animate(_contentScale, ScaleTransform.ScaleXProperty, 1, TimeSpan.FromMilliseconds(190 * k), OutEase, 0);
             Animate(_contentScale, ScaleTransform.ScaleYProperty, 1, TimeSpan.FromMilliseconds(190 * k), OutEase, 0);
             if (moving && _contentScale.ScaleX >= 0.999) { _contentScale.ScaleX = _contentScale.ScaleY = grow; Animate(_contentScale, ScaleTransform.ScaleXProperty, 1, TimeSpan.FromMilliseconds(190 * k), OutEase); Animate(_contentScale, ScaleTransform.ScaleYProperty, 1, TimeSpan.FromMilliseconds(190 * k), OutEase); }
@@ -230,9 +233,21 @@ public partial class IslandWindow : Window
     private static FrameworkElement BuildActivity()
     {
         var activity = ((App)Application.Current).Flyout.BuildActivity();
+        if (activity is not StackPanel { Children.Count: > 3 } list) return activity;
         // The notch shows the time already, and a clock here would stand still (it only ticks inside the flyout).
-        if (activity is StackPanel { Children.Count: > 2 } list) list.Children.RemoveRange(0, 2);
-        return activity;
+        list.Children.RemoveRange(0, 2);
+        // Wide panel: notifications and apps on the left, the calendar as a card on the right.
+        var calendar = list.Children[^1];
+        list.Children.Remove(calendar);
+        var layout = new Grid();
+        layout.ColumnDefinitions.Add(new ColumnDefinition());
+        layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(16) });
+        layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(300) });
+        layout.Children.Add(new ScrollViewer { Content = list, VerticalScrollBarVisibility = ScrollBarVisibility.Hidden, Focusable = false });
+        var card = new Border { Background = Card, CornerRadius = new CornerRadius(16), Padding = new Thickness(14, 0, 14, 10), Child = calendar, VerticalAlignment = VerticalAlignment.Top };
+        Grid.SetColumn(card, 2);
+        layout.Children.Add(card);
+        return layout;
     }
 
     private void FillTray()
@@ -316,12 +331,9 @@ public partial class IslandWindow : Window
         _surface.MoveTo((float)((_expanded ? ExpandedW : CompactW) * k), (float)((height + (docked ? radius : 0)) * k), (float)((docked ? -radius : 8) * k), (float)(radius * k), _expanded, animate);
     }
 
-    // The content goes on top first, then the body right below it, so the body never covers the content, not even for a moment.
-    private void KeepOnTop()
-    {
-        Native.BringTopmost(this);
-        _surface.PlaceBelow(new System.Windows.Interop.WindowInteropHelper(this).Handle);
-    }
+    // The content window is owned by the body, so Windows keeps it right above the body: raising the body is enough,
+    // and the body can neither cover the content nor slip behind other windows.
+    private void KeepOnTop() => _surface.Raise();
 
     // ---------- cover and title on the GPU ----------
 

@@ -130,7 +130,7 @@
                         </Grid>
 
                         <!-- Mitteilungen: notifications, running apps, calendar -->
-                        <ScrollViewer x:Name="NotifyPage" Grid.Row="1" Margin="0,8,0,0" Visibility="Collapsed" VerticalScrollBarVisibility="Hidden" Focusable="False"/>
+                        <ContentControl x:Name="NotifyPage" Grid.Row="1" Margin="0,8,0,0" Visibility="Collapsed" Focusable="False"/>
                     </Grid>
                 </Grid>
             </Grid>

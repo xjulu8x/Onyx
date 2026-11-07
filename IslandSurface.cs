@@ -261,13 +261,15 @@ internal sealed class IslandSurface
 
     public void SetVisible(bool visible) => ShowWindow(_window.Handle, visible ? 4 /* SW_SHOWNOACTIVATE */ : 0);
 
-    /// <summary>Keeps the surface directly below the content window.</summary>
-    public void PlaceBelow(IntPtr content) => Native.SetWindowPos(_window.Handle, content, 0, 0, 0, 0, Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+    public IntPtr Handle => _window.Handle;
+
+    /// <summary>Brings the surface to the top; the content window, which it owns, always stays right above it.</summary>
+    public void Raise() => Native.SetWindowPos(_window.Handle, Native.HWND_TOPMOST, 0, 0, 0, 0, Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
 
     /// <summary>Tint and edge. With real blur behind it the tint can be lighter.</summary>
     public void SetLook(System.Windows.Media.Color tint, double opacity, System.Windows.Media.Color? rim)
     {
-        byte alpha = (byte)(255 * opacity * (_blur ? 0.6 : 0.98)); // always a little see-through: that is the glass
+        byte alpha = (byte)(255 * Math.Min(1, opacity * (_blur ? 0.6 : 1.03))); // without blur: as solid as the iPhone island at the default 97 % // always a little see-through: that is the glass
         _tint.Brush = _compositor.CreateColorBrush(Color.FromArgb(alpha, tint.R, tint.G, tint.B));
         var top = rim ?? System.Windows.Media.Color.FromRgb(255, 255, 255);
         _rim.StrokeBrush = Gradient(Color.FromArgb(rim == null ? (byte)0x50 : (byte)0xC0, top.R, top.G, top.B), Color.FromArgb(rim == null ? (byte)0x10 : (byte)0x50, top.R, top.G, top.B));
