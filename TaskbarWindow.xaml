@@ -41,7 +41,7 @@
         </StackPanel>
 
         <!-- Right: tray -->
-        <StackPanel x:Name="RightPanel" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,10,0" Effect="{StaticResource TextShadow}">
+        <StackPanel x:Name="RightPanel" Visibility="Collapsed" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,10,0" Effect="{StaticResource TextShadow}">
             <!-- Opens the window with the icons of background apps, like the arrow in Windows -->
             <Button x:Name="TrayBtn" Style="{StaticResource TrayButton}" Content="&#xE70E;" FontSize="11" Click="Tray_Click" ToolTip="Ausgeblendete Symbole" Visibility="Collapsed"/>
             <Button x:Name="NetBtn" Style="{StaticResource TrayButton}" Content="&#xE701;" Click="Network_Click" ToolTip="Netzwerk"/>

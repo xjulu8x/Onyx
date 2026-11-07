@@ -20,6 +20,17 @@ public class MediaService
     public string Artist { get; private set; } = "";
     public ImageSource Art { get; private set; }
     public bool IsPlaying { get; private set; }
+    /// <summary>Name of the playing app, e.g. "Spotify" or "Chrome".</summary>
+    public string Source { get; private set; } = "";
+
+    private static string AppName(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return "";
+        var name = id.Split('!')[0].Split('\\').Last();
+        if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) name = name[..^4];
+        name = name.Split('.').Last(part => part.Length > 2);
+        return name.Length > 0 ? char.ToUpper(name[0]) + name[1..] : "";
+    }
     public TimeSpan Duration { get; private set; }
     public TimeSpan Position
     {
@@ -63,6 +74,7 @@ public class MediaService
             var tl = s.GetTimelineProperties();
 
             HasSession = true;
+            Source = AppName(s.SourceAppUserModelId);
             IsPlaying = info.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
             Duration = tl.EndTime - tl.StartTime;
             _pos = tl.Position;

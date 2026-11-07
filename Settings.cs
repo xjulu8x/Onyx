@@ -13,6 +13,9 @@ public class Settings
     public bool TaskbarAutoHide { get; set; }
     public bool SaveMemory { get; set; }
 
+    /// <summary>Version of the default layout; older settings are moved to the notch at the top edge once (2.0).</summary>
+    public int Layout { get; set; }
+
     [System.Text.Json.Serialization.JsonIgnore]
     public double Transparency => TaskbarTransparency ?? (TransparentTaskbar ? 0.12 : 0.02);
     public bool ShowWidgets { get; set; } = true;
@@ -40,7 +43,7 @@ public class Settings
     public int RimStyle { get; set; } = 1; // 0 none, 1 subtle, 2 accent, 3 light run
     public int ClockStyle { get; set; } // 0 time and date, 1 time, 2 large
     public bool Grain { get; set; }
-    public int IslandShape { get; set; } // 0 floating, 1 docked, 2 capsule
+    public int IslandShape { get; set; } = 1; // 0 floating, 1 docked (default since 2.0), 2 capsule
     public int MotionStyle { get; set; } // 0 soft, 1 springy, 2 direct
     public int WidgetGraph { get; set; } // 0 line, 1 bars, 2 rings
     public bool WidgetsFree { get; set; } // every block is its own widget

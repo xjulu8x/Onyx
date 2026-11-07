@@ -21,6 +21,7 @@ public partial class FlyoutWindow : Window
     private static readonly CultureInfo De = CultureInfo.GetCultureInfo("de-DE");
     private FlyoutKind? _kind;
     private double? _anchorX; // centered above this x instead of at the right edge
+    private bool _fromTop;
     private bool _closing;
     private DateTime _closedAt;
     private readonly DispatcherTimer _clock;
@@ -46,7 +47,7 @@ public partial class FlyoutWindow : Window
 
     // ---------- open / close ----------
 
-    public void Toggle(FlyoutKind kind, bool activate = true, double? anchorX = null)
+    public void Toggle(FlyoutKind kind, bool activate = true, double? anchorX = null, bool fromTop = false)
     {
         // A click on the tray button deactivates (closes) us first; don't reopen on that same click.
         if ((DateTime.Now - _closedAt).TotalMilliseconds < 250 && _kind == kind) return;
@@ -55,6 +56,7 @@ public partial class FlyoutWindow : Window
         _kind = kind;
         _closing = false;
         _anchorX = anchorX;
+        _fromTop = fromTop;
         Width = kind == FlyoutKind.Tray ? 216 : 380;
         Host.Content = kind switch
         {
@@ -80,6 +82,8 @@ public partial class FlyoutWindow : Window
         Left = _anchorX is { } x
             ? Math.Min(x - ActualWidth / 2, SystemParameters.PrimaryScreenWidth - ActualWidth - 2)
             : SystemParameters.PrimaryScreenWidth - ActualWidth - 2;
+        // Opened from the island: centered below it at the top; otherwise above the taskbar.
+        if (_fromTop) { Left = (SystemParameters.PrimaryScreenWidth - ActualWidth) / 2; Top = 4; return; }
         Top = Math.Max(SystemParameters.WorkArea.Top, SystemParameters.WorkArea.Bottom - ActualHeight + 4);
     }
 
@@ -278,6 +282,9 @@ public partial class FlyoutWindow : Window
 
     // ---------- action center ----------
 
+    /// <summary>The action center content for the island's "Mitteilungen" page.</summary>
+    public FrameworkElement BuildActivity() => BuildActionCenter();
+
     private FrameworkElement BuildActionCenter()
     {
         var root = new StackPanel();
@@ -287,24 +294,6 @@ public partial class FlyoutWindow : Window
         root.Children.Add(_bigTime);
         root.Children.Add(new TextBlock { Text = DateTime.Now.ToString("dddd, d. MMMM yyyy", De), FontSize = 12, Foreground = Dim, Margin = new Thickness(2, 0, 0, 14) });
 
-        // Quick tiles (they open the matching Windows setting)
-        var tiles = new UniformGrid3();
-        void Tile(string glyph, string label, Action act)
-        {
-            var b = new Button { Style = (Style)FindResource("Tile") };
-            var sp = new StackPanel();
-            sp.Children.Add(Glyph(glyph, 16));
-            sp.Children.Add(new TextBlock { Text = label, FontSize = 11, Margin = new Thickness(0, 6, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis });
-            b.Content = sp;
-            b.Click += (_, _) => act();
-            tiles.Children.Add(b);
-        }
-        Tile("", "Bluetooth", () => Run("ms-settings:bluetooth"));
-        Tile("", "Nachtlicht", () => Run("ms-settings:nightlight"));
-        Tile("", "Nicht stören", () => Run("ms-settings:notifications"));
-        Tile("", "Energie", () => Run("ms-settings:powersleep"));
-        Tile("", "Einstellungen", () => Run("ms-settings:"));
-        root.Children.Add(tiles);
 
         // Notifications
         root.Children.Add(new TextBlock { Text = "Benachrichtigungen", FontSize = 12, FontWeight = FontWeights.SemiBold, Margin = new Thickness(2, 16, 0, 6) });

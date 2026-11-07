@@ -275,6 +275,14 @@ internal sealed class IslandSurface
 
     public void SetGlow(float opacity) => _glow.Opacity = opacity;
 
+    /// <summary>Cover and title only belong to the start page of the panel and to the notch.</summary>
+    public void ShowMedia(bool visible)
+    {
+        if (!MediaReady) return;
+        _art.Opacity = visible ? 1 : 0;
+        if (!visible) { _bigText.StopAnimation("Opacity"); _bigText.Opacity = 0; }
+    }
+
     public void SetGlowColor(System.Windows.Media.Color c) =>
         _glow.Brush = Gradient(Color.FromArgb(0, c.R, c.G, c.B), Color.FromArgb(0xFF, c.R, c.G, c.B));
 

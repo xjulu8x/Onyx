@@ -92,6 +92,17 @@ internal static class Native
 }
 
 // ---- Core Audio (master volume) ----
+[ComImport, Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IPropertyStore
+{
+    [PreserveSig] int GetCount(out uint count);
+    [PreserveSig] int GetAt(uint index, out PropertyKey key);
+    [PreserveSig] int GetValue(ref PropertyKey key, out PropVariant value);
+}
+
+[StructLayout(LayoutKind.Sequential)] internal struct PropertyKey { public Guid Format; public int Id; }
+[StructLayout(LayoutKind.Explicit, Size = 24)] internal struct PropVariant { [FieldOffset(0)] public ushort Type; [FieldOffset(8)] public IntPtr Pointer; }
+
 [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
 internal class MMDeviceEnumeratorCom { }
 
@@ -106,6 +117,7 @@ internal interface IMMDeviceEnumerator
 internal interface IMMDevice
 {
     [PreserveSig] int Activate(ref Guid iid, int clsCtx, IntPtr p, [MarshalAs(UnmanagedType.IUnknown)] out object itf);
+    [PreserveSig] int OpenPropertyStore(int access, out IPropertyStore store);
 }
 
 [ComImport, Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -180,6 +192,30 @@ internal static class Volume
         }
         catch { return null; }
     }
+
+    private static string _deviceName;
+    private static DateTime _deviceAt;
+
+    /// <summary>Name of the current output device, e.g. "Kopfhörer (USB)". Read at most every 5 seconds.</summary>
+    public static string DeviceName()
+    {
+        if ((DateTime.UtcNow - _deviceAt).TotalSeconds < 5) return _deviceName;
+        _deviceAt = DateTime.UtcNow;
+        try
+        {
+            var en = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom();
+            if (en.GetDefaultAudioEndpoint(0, 1, out var dev) != 0) return _deviceName = null;
+            if (dev.OpenPropertyStore(0, out var store) != 0) return _deviceName = null;
+            var key = new PropertyKey { Format = new Guid("a45c254e-df1c-4efd-8020-67d146a850e0"), Id = 14 };
+            if (store.GetValue(ref key, out var value) != 0 || value.Type != 31 /* VT_LPWSTR */) return _deviceName = null;
+            _deviceName = Marshal.PtrToStringUni(value.Pointer);
+            PropVariantClear(ref value);
+            return _deviceName;
+        }
+        catch { return _deviceName = null; }
+    }
+
+    [DllImport("ole32.dll")] private static extern int PropVariantClear(ref PropVariant value);
 
     public static float Get() { var e = Endpoint(); if (e == null) return 0; e.GetMasterVolumeLevelScalar(out var v); return v; }
     public static void Set(float v) { var g = Guid.Empty; Endpoint()?.SetMasterVolumeLevelScalar(Math.Clamp(v, 0f, 1f), ref g); }

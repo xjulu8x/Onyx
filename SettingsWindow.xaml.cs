@@ -231,7 +231,6 @@ public partial class SettingsWindow : Window
         var icons = Section("Inhalt");
         Pick(icons, "App-Symbole", new[] { "Farbig", "Weiß", "Grau", "Akzent" }, _s.IconTint, i => { _s.IconTint = i; bar.ApplyLook(); });
         Pick(icons, "App-Anzeige", new[] { "Strich", "Punkt", "Leuchten", "Aus" }, _s.IndicatorStyle, i => { _s.IndicatorStyle = i; bar.ApplyLook(); });
-        Pick(icons, "Uhr", new[] { "Mit Datum", "Nur Zeit", "Groß" }, _s.ClockStyle, i => { _s.ClockStyle = i; bar.ApplyLook(); });
         Pick(icons, "Apps", new[] { "Mittig", "Links" }, _s.TaskbarAppsLeft ? 1 : 0, i => { _s.TaskbarAppsLeft = i == 1; bar.ApplyLook(); });
 
         var size = Section("Größe");

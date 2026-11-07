@@ -35,6 +35,9 @@ internal static class Theme
 
     /// <summary>Multiplier for animation lengths; 0 turns animations off.</summary>
     public static double Speed => Settings.Current.AnimationSpeed switch { 0 => 0.6, 2 => 0, _ => 1 };
+
+    /// <summary>Windows' "Animationseffekte" are off: no growing or sliding, only short cross-fades.</summary>
+    public static bool ReduceMotion => !SystemParameters.ClientAreaAnimation;
     public static TimeSpan Ms(double ms) => TimeSpan.FromMilliseconds(ms * Speed);
 
     /// <summary>Background of a surface: plain, or a tiled fine grain. Either way it is one static brush with no running cost.</summary>
@@ -132,7 +135,9 @@ internal static class Theme
     public static (float Damping, TimeSpan Period) Spring(bool open)
     {
         double fast = Settings.Current.AnimationSpeed == 0 ? 0.7 : 1;
-        var (damping, ms) = !open ? (1f, 110.0) : Settings.Current.MotionStyle switch { 1 => (0.66f, 170.0), 2 => (1f, 90.0), _ => (0.82f, 160.0) };
+        // Apple: critically damped by default (no bounce: hovering carries no momentum), quick response.
+        // Measured against the reference video: open in about 150-200 ms, close in about 120 ms.
+        var (damping, ms) = !open ? (1f, 48.0) : Settings.Current.MotionStyle switch { 1 => (0.8f, 70.0), 2 => (1f, 45.0), _ => (1f, 62.0) };
         return (damping, TimeSpan.FromMilliseconds(ms * fast));
     }
 

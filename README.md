@@ -24,8 +24,8 @@ Onyx legt sich über deinen Windows-Desktop und ersetzt die Taskleiste durch ein
 
 | | |
 |---|---|
-| 🏝️ **Dynamic Island** | Oben in der Mitte – zeigt das aktuelle Lied und klappt beim Darüberfahren auf, mit Steuerung und Lautstärke. |
-| 📌 **Eigene Taskleiste** | Schwebend und aufgeräumt: deine Apps, Netzwerk, Lautstärke und Uhr. |
+| 🏝️ **Dynamic Island** | Eine Kerbe am oberen Rand mit Uhrzeit und Musik. Beim Darüberfahren öffnet sich ein großes Panel mit Musik, Werkzeugen, Steuerung und Mitteilungen. |
+| 📌 **Dock** | Die Taskleiste zeigt nur noch Start und deine Apps, alles andere ist in der Island. |
 | 📊 **Desktop-Widgets** | Netzwerk, GPU- und CPU-Temperatur, CPU-Verlauf, RAM und Festplatten – frei anordnen. |
 | 🎨 **Anpassbar** | Farben, Transparenz, automatisches Einklappen, Autostart. |
 
@@ -65,7 +65,9 @@ Onyx prüft selbst, ob es eine neue Version gibt. Dann wird das **Zahnrad in der
 ### Dynamic Island
 | Aktion | Ergebnis |
 |---|---|
-| Maus darüber | Island klappt auf (Player und Lautstärke) |
+| Maus darüber | Panel öffnet sich: **Start** (Musik, Lautstärke, Werkzeuge), **Steuerung** (Kacheln, Hintergrund-Apps), **Mitteilungen** (Benachrichtigungen, laufende Apps, Kalender) |
+| Werkzeuge | Screenshot (Bereich oder ganz), Text vom Bildschirm, QR-Code lesen, Pipette, Aufnahme |
+| Caps Lock, Lautstärketasten | Kurzer Hinweis in der Kerbe |
 | Klick auf das Cover | Play / Pause |
 | **Zahnrad** | Öffnet das Einstellungsfenster |
 | Rechtsklick | Einstellungen und **Beenden** |

@@ -9,9 +9,10 @@ namespace DesktopOverlay;
 
 public partial class IslandWindow : Window
 {
-    private const double ExpandedW = 400, ExpandedH = 160;
+    private const double ExpandedW = 820, ExpandedH = 330, ExpandedRadius = 24;
+    private const double WindowW = 900, WindowH = 380; // room for the open panel and its spring
     private static bool Capsule => Settings.Current.IslandShape == 2;
-    private static double CompactW => Capsule ? 180 : 240;
+    private double CompactW => (Capsule ? 200 : 260) + (_flash != null ? 70 : 0); // wider while a hint shows
     private static double CompactH => Capsule ? 40 : 34;
     private static double CompactRadius => CompactH / 2;
     private static readonly IEasingFunction Ease = new CubicEase { EasingMode = EasingMode.EaseOut };
@@ -47,6 +48,8 @@ public partial class IslandWindow : Window
         fast.Start();
 
         UpdateService.Changed += () => Dispatcher.BeginInvoke(ShowUpdateState);
+        BuildPanel();
+        KeyboardHook.StatusKey += OnStatusKey;
         _glowTimer.Tick += (_, _) => GlowTick();
         ApplyLook();
         if (Settings.Current.AlwaysExpanded) SetExpanded(true, animate: false);
@@ -68,24 +71,33 @@ public partial class IslandWindow : Window
 
     private void SetExpanded(bool expand, bool animate = true)
     {
+        if (expand == _expanded && animate) return;
         _expanded = expand;
-        // Choreography: the body moves on the GPU at once; the content only fades, a beat later when opening
-        // and first thing when closing, so it never has to follow the moving edge.
+        // Choreography: body, cover and title move on the GPU at once, on critically damped springs that start from
+        // where they are, so a quick in-and-out never jumps. The controls materialize out of the notch: a short
+        // fade with a slight grow from the top edge (only opacity and a cached scale, so the window stays cheap).
         double k = animate ? Theme.Speed : 0;
-        UpdateSurface(animate && k > 0);
-        MoveMedia(animate && k > 0);
+        bool moving = animate && k > 0;
+        UpdateSurface(moving);
+        MoveMedia(moving);
         if (expand) SizeContent();
-        var hide = new DoubleAnimation(0, TimeSpan.FromMilliseconds(80 * k)) { EasingFunction = FadeEase };
+        var hide = new DoubleAnimation(0, TimeSpan.FromMilliseconds(70 * k)) { EasingFunction = FadeEase };
+        double grow = Theme.ReduceMotion ? 1 : 0.96;
         if (expand)
         {
             Compact.BeginAnimation(OpacityProperty, hide);
-            Animate(Expanded, OpacityProperty, 1, TimeSpan.FromMilliseconds(220 * k), FadeEase, 170 * k); // only once the body has room for it
+            Animate(Expanded, OpacityProperty, 1, TimeSpan.FromMilliseconds(150 * k), FadeEase, 40 * k);
+            Animate(_contentScale, ScaleTransform.ScaleXProperty, 1, TimeSpan.FromMilliseconds(190 * k), OutEase, 0);
+            Animate(_contentScale, ScaleTransform.ScaleYProperty, 1, TimeSpan.FromMilliseconds(190 * k), OutEase, 0);
+            if (moving && _contentScale.ScaleX >= 0.999) { _contentScale.ScaleX = _contentScale.ScaleY = grow; Animate(_contentScale, ScaleTransform.ScaleXProperty, 1, TimeSpan.FromMilliseconds(190 * k), OutEase); Animate(_contentScale, ScaleTransform.ScaleYProperty, 1, TimeSpan.FromMilliseconds(190 * k), OutEase); }
         }
         else
         {
             hide.Completed += (_, _) => { if (!_expanded) SizeContent(); };
             Expanded.BeginAnimation(OpacityProperty, hide);
-            Animate(Compact, OpacityProperty, 1, TimeSpan.FromMilliseconds(160 * k), FadeEase, 140 * k);
+            Animate(_contentScale, ScaleTransform.ScaleXProperty, grow, TimeSpan.FromMilliseconds(90 * k), FadeEase);
+            Animate(_contentScale, ScaleTransform.ScaleYProperty, grow, TimeSpan.FromMilliseconds(90 * k), FadeEase);
+            Animate(Compact, OpacityProperty, 1, TimeSpan.FromMilliseconds(120 * k), FadeEase, 90 * k);
         }
         Expanded.IsHitTestVisible = expand;
         ShowEqualizer();
@@ -94,6 +106,181 @@ public partial class IslandWindow : Window
     }
 
     private void Settings_Click(object sender, RoutedEventArgs e) => ((App)Application.Current).OpenSettings();
+
+    // ---------- tabs and pages ----------
+
+    private static readonly IEasingFunction OutEase = new CubicEase { EasingMode = EasingMode.EaseOut };
+    private readonly ScaleTransform _contentScale = new(1, 1);
+    private static readonly Brush Card = new SolidColorBrush(Color.FromArgb(0x10, 255, 255, 255));
+    private static readonly Brush CardHover = new SolidColorBrush(Color.FromArgb(0x1C, 255, 255, 255));
+    private static readonly Brush TabOn = new SolidColorBrush(Color.FromArgb(0x24, 255, 255, 255));
+    private int _page;
+
+    private void BuildPanel()
+    {
+        Expanded.RenderTransform = _contentScale;
+        Expanded.RenderTransformOrigin = new Point(0.5, 0);
+
+        var tabs = new (string Glyph, string Label)[] { ("", "Start"), ("", "Steuerung"), ("", "Mitteilungen") };
+        for (int i = 0; i < tabs.Length; i++)
+        {
+            int index = i;
+            var content = new StackPanel { Orientation = Orientation.Horizontal };
+            content.Children.Add(new TextBlock { Text = tabs[i].Glyph, FontFamily = (FontFamily)FindResource("Icons"), FontSize = 14, VerticalAlignment = VerticalAlignment.Center });
+            content.Children.Add(new TextBlock { Text = tabs[i].Label, FontSize = 12, FontWeight = FontWeights.SemiBold, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
+            var tab = new Border { CornerRadius = new CornerRadius(15), Padding = new Thickness(12, 6, 14, 6), Margin = new Thickness(0, 0, 4, 0), Cursor = Cursors.Hand, Child = content, Background = Brushes.Transparent };
+            Press(tab);
+            tab.MouseLeftButtonUp += (_, _) => ShowPage(index);
+            Tabs.Children.Add(tab);
+        }
+
+        // Tools: the result shows as a short hint in the notch.
+        void Tool(string glyph, string label, Action run)
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            row.Children.Add(new TextBlock { Text = glyph, FontFamily = (FontFamily)FindResource("Icons"), FontSize = 15, Width = 22, VerticalAlignment = VerticalAlignment.Center });
+            row.Children.Add(new TextBlock { Text = label, FontSize = 12, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, MaxWidth = 100 });
+            var tile = new Border { Background = Card, CornerRadius = new CornerRadius(14), Margin = new Thickness(4), Padding = new Thickness(12, 0, 8, 0), Cursor = Cursors.Hand, Child = row };
+            Hover(tile);
+            Press(tile);
+            tile.MouseLeftButtonUp += (_, _) => { SetExpanded(false); run(); };
+            ToolsGrid.Children.Add(tile);
+        }
+        ToolsGrid.Margin = new Thickness(-4);
+        Tool("", "Bereich", IslandTools.ScreenshotArea);
+        Tool("", "Ganzer Bildschirm", () => IslandTools.ScreenshotFull(Flash));
+        Tool("", "Text vom Bildschirm", () => IslandTools.ReadText(Flash));
+        Tool("", "QR-Code", () => IslandTools.ReadQr(Flash));
+        Tool("", "Pipette", () => IslandTools.PickColor(Flash));
+        Tool("", "Aufnahme", () => IslandTools.Record(Flash));
+
+        // Control: big tiles instead of the action center tiles and the tray buttons of the old taskbar.
+        void Control(string glyph, string label, string detail, Action run)
+        {
+            var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Bottom };
+            stack.Children.Add(new TextBlock { Text = glyph, FontFamily = (FontFamily)FindResource("Icons"), FontSize = 18, Margin = new Thickness(0, 0, 0, 10) });
+            stack.Children.Add(new TextBlock { Text = label, FontSize = 13, FontWeight = FontWeights.SemiBold });
+            stack.Children.Add(new TextBlock { Text = detail, FontSize = 11, Foreground = (Brush)FindResource("Dim"), Margin = new Thickness(0, 2, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis });
+            var tile = new Border { Background = Card, CornerRadius = new CornerRadius(16), Margin = new Thickness(4), Padding = new Thickness(14, 12, 14, 12), Cursor = Cursors.Hand, Child = stack };
+            Hover(tile);
+            Press(tile);
+            tile.MouseLeftButtonUp += (_, _) => { SetExpanded(false); run(); };
+            ControlTiles.Children.Add(tile);
+        }
+        var app = (App)Application.Current;
+        Control("", "Netzwerk", "WLAN und Verbindung", () => app.Flyout.Toggle(FlyoutKind.Network, fromTop: true));
+        Control("", "Bluetooth", "Geräte verbinden", () => IslandTools.Open("ms-settings:bluetooth"));
+        Control("", "Sound", "Ausgabe und Eingabe", () => IslandTools.Open("ms-settings:sound"));
+        Control("", "Nachtlicht", "Wärmere Farben", () => IslandTools.Open("ms-settings:nightlight"));
+        Control("", "Nicht stören", "Mitteilungen", () => IslandTools.Open("ms-settings:notifications"));
+        Control("", "Energie", "Akku und Leistung", () => IslandTools.Open("ms-settings:powersleep"));
+        Control("", "Task-Manager", "Laufende Prozesse", () => IslandTools.Open("taskmgr.exe"));
+        Control("", "Onyx", "Einstellungen", app.OpenSettings);
+
+        Tray.Changed += () => Dispatcher.BeginInvoke(() => { if (_page == 1) FillTray(); });
+        ShowPage(0);
+    }
+
+    private void ShowPage(int index)
+    {
+        _page = index;
+        for (int i = 0; i < Tabs.Children.Count; i++)
+        {
+            var tab = (Border)Tabs.Children[i];
+            tab.Background = i == index ? TabOn : Brushes.Transparent;
+            ((StackPanel)tab.Child).Children[1].Visibility = i == index ? Visibility.Visible : Visibility.Collapsed; // only the open tab shows its name
+        }
+        StartPage.Visibility = index == 0 ? Visibility.Visible : Visibility.Collapsed;
+        ControlPage.Visibility = index == 1 ? Visibility.Visible : Visibility.Collapsed;
+        NotifyPage.Visibility = index == 2 ? Visibility.Visible : Visibility.Collapsed;
+        // Cover and title live on the start page only.
+        _surface.ShowMedia(index == 0 || !_expanded);
+        if (index == 1) FillTray();
+        // Built when opened and dropped on leaving, so notifications and the app list cost nothing in between.
+        NotifyPage.Content = index == 2 ? ((App)Application.Current).Flyout.BuildActivity() : null;
+    }
+
+    /// <summary>Debug aid for --snapshot: renders each page of the open panel to a PNG file.</summary>
+    public void RenderPages(string dir)
+    {
+        var hitArea = Island.Background;
+        Island.Background = new SolidColorBrush(Color.FromRgb(0x0B, 0x0B, 0x0E)); // the body is drawn by the surface, so give the picture one
+        for (int i = 0; i < Tabs.Children.Count; i++)
+        {
+            ShowPage(i);
+            UpdateLayout();
+            var image = Render(Island, Island.ActualWidth, Island.ActualHeight);
+            var png = new System.Windows.Media.Imaging.PngBitmapEncoder();
+            png.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(image));
+            using var file = System.IO.File.Create(System.IO.Path.Combine(dir, $"IslandPage{i}.png"));
+            png.Save(file);
+        }
+        Island.Background = hitArea;
+        ShowPage(0);
+    }
+
+    private void FillTray()
+    {
+        TrayIcons.Children.Clear();
+        foreach (var icon in Tray.Visible()) TrayIcons.Children.Add(Tray.Button(icon));
+    }
+
+    private static void Hover(Border tile)
+    {
+        tile.MouseEnter += (_, _) => tile.Background = CardHover;
+        tile.MouseLeave += (_, _) => tile.Background = Card;
+    }
+
+    /// <summary>Feedback on press, not on release: a quick, slight shrink that springs back.</summary>
+    private static void Press(FrameworkElement element)
+    {
+        var scale = new ScaleTransform(1, 1);
+        element.RenderTransform = scale;
+        element.RenderTransformOrigin = new Point(0.5, 0.5);
+        void To(double value, int ms)
+        {
+            var a = new DoubleAnimation(value, TimeSpan.FromMilliseconds(ms)) { EasingFunction = OutEase };
+            scale.BeginAnimation(ScaleTransform.ScaleXProperty, a);
+            scale.BeginAnimation(ScaleTransform.ScaleYProperty, a);
+        }
+        element.PreviewMouseLeftButtonDown += (_, _) => To(0.96, 90);
+        element.PreviewMouseLeftButtonUp += (_, _) => To(1, 160);
+        element.MouseLeave += (_, _) => To(1, 160);
+    }
+
+    // ---------- hints in the notch ----------
+
+    /// <summary>Caps Lock and the volume keys: the new state shows briefly in the notch. Read a moment later, once Windows applied it.</summary>
+    private async void OnStatusKey(int key)
+    {
+        await Task.Delay(60);
+        if (key == 0x14) Flash(Keyboard.IsKeyToggled(Key.CapsLock) ? "Caps Lock an" : "Caps Lock aus");
+        else Flash(Volume.IsMuted() ? "Ton aus" : $"Lautstärke {Volume.Get() * 100:0} %");
+    }
+
+    private string _flash;
+    private DispatcherTimer _flashTimer;
+
+    /// <summary>Shows a short message in the notch, which widens for it, like a live activity.</summary>
+    public void Flash(string text)
+    {
+        _flashTimer ??= new DispatcherTimer(TimeSpan.FromMilliseconds(1800), DispatcherPriority.Normal, (_, _) => { _flashTimer.Stop(); _flash = null; RefreshCompact(); }, Dispatcher);
+        _flashTimer.Stop();
+        _flash = text;
+        RefreshCompact();
+        _flashTimer.Start();
+    }
+
+    private void RefreshCompact()
+    {
+        UpdateMedia();
+        Compact.Width = CompactW - 24;
+        if (_expanded) return;
+        SizeContent();
+        UpdateSurface(animate: Theme.Speed > 0);
+        MoveMedia(animate: Theme.Speed > 0);
+        ShowEqualizer();
+    }
 
     /// <summary>The content layer is only as large as the island: it receives the mouse and clips the content.</summary>
     private void SizeContent()
@@ -106,7 +293,7 @@ public partial class IslandWindow : Window
     {
         var s = Settings.Current;
         double k = VisualTreeHelper.GetDpi(this).DpiScaleX * s.IslandScale;
-        double radius = (_expanded ? 28 : CompactRadius) * s.IslandCorners;
+        double radius = (_expanded ? ExpandedRadius : CompactRadius) * s.IslandCorners;
         double height = _expanded ? ExpandedH : CompactH;
         // Docked: the upper corners sit above the screen edge, so only the lower ones show.
         bool docked = s.IslandShape == 1;
@@ -141,9 +328,9 @@ public partial class IslandWindow : Window
         if (!artKey.Equals(_artKey))
         {
             _artKey = artKey;
-            var cover = new Border { Width = 98, Height = 98, CornerRadius = new CornerRadius(16), Background = _media.HasSession && _media.Art != null ? new ImageBrush(_media.Art) { Stretch = Stretch.UniformToFill } : new SolidColorBrush(Color.FromArgb(0x1F, 255, 255, 255)) };
+            var cover = new Border { Width = 120, Height = 120, CornerRadius = new CornerRadius(14), Background = _media.HasSession && _media.Art != null ? new ImageBrush(_media.Art) { Stretch = Stretch.UniformToFill } : new SolidColorBrush(Color.FromArgb(0x1F, 255, 255, 255)) };
             if (_media.Art == null) cover.Child = new TextBlock { Text = "", FontFamily = (FontFamily)FindResource("Icons"), FontSize = 30, Foreground = Brushes.White, Opacity = 0.65, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-            art = Render(cover, 98, 98);
+            art = Render(cover, 120, 120);
         }
         string smallKey = CompactTitle.Text + font;
         if (smallKey != _smallKey)
@@ -160,7 +347,7 @@ public partial class IslandWindow : Window
             var artist = Text(Artist.Text, 11, FontWeights.SemiBold, 0.65);
             artist.Margin = new Thickness(0, 3, 0, 0);
             both.Children.Add(artist);
-            big = Render(both, ExpandedW - 126 - 28, 40);
+            big = Render(both, 284, 40);
         }
         _surface.SetMedia(art, small, big);
         foreach (var hidden in new UIElement[] { Art, CompactArt, CompactTitle, TitleText, Artist }) hidden.Opacity = 0;
@@ -182,10 +369,11 @@ public partial class IslandWindow : Window
     {
         var s = Settings.Current;
         float k = (float)(VisualTreeHelper.GetDpi(this).DpiScaleX * s.IslandScale);
-        float corner = s.IslandShape == 1 ? (float)((_expanded ? 28 : CompactRadius) * s.IslandCorners) : 0;
-        float artSize = _expanded ? 98 : Capsule ? 28 : 22;
-        float artX = _expanded ? 16 : 12, artY = _expanded ? 16 : (float)((CompactH - artSize) / 2);
-        float textX = artX + artSize + (_expanded ? 12 : 9), textY = _expanded ? 16 : (float)((CompactH - 18) / 2);
+        float corner = s.IslandShape == 1 ? (float)((_expanded ? ExpandedRadius : CompactRadius) * s.IslandCorners) : 0;
+        // Expanded: the music card (tabs 12+34, gap 8, card padding 14), compact: left in the notch.
+        float artSize = _expanded ? 120 : Capsule ? 28 : 22;
+        float artX = _expanded ? 30 : 12, artY = _expanded ? 68 : (float)((CompactH - artSize) / 2);
+        float textX = artX + artSize + (_expanded ? 14 : 9), textY = _expanded ? 86 : (float)((CompactH - 18) / 2);
         _surface.SetTextScale(k / (float)TextScale);
         _surface.MoveMedia(new System.Numerics.Vector2(artX * k, (artY + corner) * k), artSize * k, new System.Numerics.Vector2(textX * k, (textY + corner) * k), _expanded, animate);
     }
@@ -218,8 +406,8 @@ public partial class IslandWindow : Window
         CompactArt.CornerRadius = new CornerRadius(Capsule ? 14 : 6);
         SizeContent();
         IslandRoot.LayoutTransform = new ScaleTransform(s.IslandScale, s.IslandScale);
-        Width = 560 * s.IslandScale;
-        Height = 210 * s.IslandScale;
+        Width = WindowW * s.IslandScale;
+        Height = WindowH * s.IslandScale;
         Left = (SystemParameters.PrimaryScreenWidth - Width) / 2;
         double dpi = VisualTreeHelper.GetDpi(this).DpiScaleX;
         _surface.Place((int)(Left * dpi), 0, (int)(Width * dpi), (int)(Height * dpi));
@@ -255,13 +443,18 @@ public partial class IslandWindow : Window
 
     // ---------- data ----------
 
+    /// <summary>Without music the notch shows the time and, when known, the CPU temperature.</summary>
+    private string IdleText() => DateTime.Now.ToString("HH:mm") + (_sys.CpuTemp is { } t ? $"   {t:0}°" : "");
+
     private void UpdateMedia()
     {
         bool has = _media.HasSession;
         TitleText.Text = has ? _media.Title : "Nichts wird abgespielt";
         Artist.Text = has ? _media.Artist : "";
-        CompactTitle.Text = _heatText ?? (has ? _media.Title : DateTime.Now.ToString("HH:mm"));
+        CompactTitle.Text = _flash ?? _heatText ?? (has ? _media.Title : IdleText());
         PlayBtn.Content = _media.IsPlaying ? "" : "";
+        SourceText.Text = has ? _media.Source.ToUpperInvariant() : "";
+        OutputText.Text = Volume.DeviceName() ?? "";
 
         var art = has ? _media.Art : null;
         Art.Background = art != null ? new ImageBrush(art) { Stretch = Stretch.UniformToFill } : new SolidColorBrush(Color.FromArgb(0x1F, 255, 255, 255));
@@ -331,7 +524,7 @@ public partial class IslandWindow : Window
     {
         _tick++;
         if (_expanded) UpdateProgress();
-        if (!_media.HasSession && _heatText == null) CompactTitle.Text = DateTime.Now.ToString("HH:mm");
+        if (!_media.HasSession && _heatText == null && _flash == null && CompactTitle.Text != IdleText()) UpdateMedia();
         if (_tick % 8 == 0) KeepOnTop();
     }
 

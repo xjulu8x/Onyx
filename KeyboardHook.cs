@@ -24,6 +24,9 @@ public static class KeyboardHook
 
     public static event Action WinKeyPressed;
 
+    /// <summary>Caps Lock (0x14) or a volume key (0xAD-0xAF) was pressed; the island shows the new state.</summary>
+    public static event Action<int> StatusKey;
+
     private static readonly HookProc Proc = Callback; // kept alive for the GC
     private static IntPtr _hook;
     private static bool _winDown, _combo;
@@ -70,6 +73,7 @@ public static class KeyboardHook
                     }
                 }
                 else if (down && _winDown) _combo = true;
+                if (down && kb.vkCode is 0x14 or 0xAD or 0xAE or 0xAF) { int key = (int)kb.vkCode; System.Windows.Application.Current.Dispatcher.BeginInvoke(() => StatusKey?.Invoke(key)); }
             }
         }
         return CallNextHookEx(_hook, code, wParam, lParam);

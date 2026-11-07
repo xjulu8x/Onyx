@@ -48,6 +48,8 @@ public partial class App : Application
         EventManager.RegisterClassHandler(typeof(System.Windows.Controls.ContextMenu), System.Windows.Controls.ContextMenu.OpenedEvent,
             new RoutedEventHandler((s, _) => MenuClickWatch.Start((System.Windows.Controls.ContextMenu)s)));
 
+        // 2.0: the island hangs as a notch at the top edge, and the taskbar is a dock with apps only.
+        if (Settings.Current.Layout < 2) { Settings.Current.IslandShape = 1; Settings.Current.TaskbarShape = 1; Settings.Current.Layout = 2; Settings.Current.Save(); }
         Theme.ApplyFont();
         Island = new IslandWindow();
         Island.Show();
@@ -140,6 +142,7 @@ public partial class App : Application
         Flyout.Toggle(flyout, activate: false);
         await Task.Delay(4000);
         System.IO.Directory.CreateDirectory(dir);
+        Island.RenderPages(dir);
         var settings = new SettingsWindow { ShowActivated = false };
         settings.Show();
         settings.RenderPages(dir);
