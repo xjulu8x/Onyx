@@ -58,6 +58,7 @@ public partial class SettingsWindow : Window
         row.Children.Add(new TextBlock { Text = glyph, FontFamily = (FontFamily)FindResource("Icons"), FontSize = 15, VerticalAlignment = VerticalAlignment.Center });
         row.Children.Add(new TextBlock { Text = title, FontSize = 13, Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
         var item = new Border { CornerRadius = new CornerRadius(8), Padding = new Thickness(10, 8, 10, 8), Margin = new Thickness(0, 1, 0, 1), Cursor = Cursors.Hand, Background = Brushes.Transparent, Child = row };
+        Feedback.SetPress(item, true);
         item.MouseLeftButtonUp += (_, _) => Show(index);
         return item;
     }
@@ -70,6 +71,11 @@ public partial class SettingsWindow : Window
         Page.Children.Add(new TextBlock { Text = _pages[index].Title, FontSize = 24, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 14) });
         _pages[index].Build();
         PageScroll.ScrollToTop();
+        // The new page settles in from slightly below instead of popping in.
+        var rise = new TranslateTransform(0, Theme.ReduceMotion ? 0 : 8);
+        Page.RenderTransform = rise;
+        Page.BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(0, 1, Theme.Ms(140)));
+        rise.BeginAnimation(TranslateTransform.YProperty, new System.Windows.Media.Animation.DoubleAnimation(0, Theme.Ms(240)) { EasingFunction = Theme.Settle });
     }
 
     private void Reload() => Show(_lastPage);

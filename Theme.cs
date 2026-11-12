@@ -40,6 +40,53 @@ internal static class Theme
     public static bool ReduceMotion => !SystemParameters.ClientAreaAnimation;
     public static TimeSpan Ms(double ms) => TimeSpan.FromMilliseconds(ms * Speed);
 
+    // ---------- shared motion (Apple: settle without bouncing, start from where things are, leave the way they came) ----------
+
+    /// <summary>The curve of a critically damped spring: quick start, long soft settle, no overshoot.</summary>
+    public static readonly IEasingFunction Settle = Freeze(new ExponentialEase { EasingMode = EasingMode.EaseOut, Exponent = 6 });
+    private static readonly IEasingFunction FadeCurve = Freeze(new QuadraticEase { EasingMode = EasingMode.EaseOut });
+    private static readonly IEasingFunction LeaveCurve = Freeze(new QuadraticEase { EasingMode = EasingMode.EaseIn });
+
+    private static IEasingFunction Freeze(EasingFunctionBase ease) { ease.Freeze(); return ease; }
+
+    /// <summary>
+    /// Brings a popup panel in from the side it belongs to (offsetY: negative = from above, positive = from below) and
+    /// grows it slightly from its anchor. A panel that was still leaving continues from where it is instead of jumping.
+    /// </summary>
+    public static void Enter(UIElement panel, ScaleTransform zoom, TranslateTransform slide, double offsetY, bool fromHidden)
+    {
+        if (fromHidden)
+        {
+            panel.BeginAnimation(UIElement.OpacityProperty, null);
+            panel.Opacity = 0;
+            foreach (var p in new[] { ScaleTransform.ScaleXProperty, ScaleTransform.ScaleYProperty }) zoom.BeginAnimation(p, null);
+            slide.BeginAnimation(TranslateTransform.YProperty, null);
+            slide.Y = ReduceMotion ? 0 : offsetY;
+            zoom.ScaleX = zoom.ScaleY = ReduceMotion ? 1 : 0.97;
+        }
+        panel.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(1, Ms(150)) { EasingFunction = FadeCurve });
+        var settle = new DoubleAnimation(ReduceMotion ? slide.Y : 0, Ms(280)) { EasingFunction = Settle };
+        slide.BeginAnimation(TranslateTransform.YProperty, settle);
+        var grow = new DoubleAnimation(1, Ms(280)) { EasingFunction = Settle };
+        zoom.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
+        zoom.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
+    }
+
+    /// <summary>The way back: same direction, a little quicker. Returns the fade, so the caller can hide the window when it ends.</summary>
+    public static DoubleAnimation Leave(UIElement panel, ScaleTransform zoom, TranslateTransform slide, double offsetY)
+    {
+        var fade = new DoubleAnimation(0, Ms(120)) { EasingFunction = LeaveCurve };
+        if (!ReduceMotion)
+        {
+            slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(offsetY * 0.6, Ms(140)) { EasingFunction = LeaveCurve });
+            var shrink = new DoubleAnimation(0.98, Ms(140)) { EasingFunction = LeaveCurve };
+            zoom.BeginAnimation(ScaleTransform.ScaleXProperty, shrink);
+            zoom.BeginAnimation(ScaleTransform.ScaleYProperty, shrink);
+        }
+        panel.BeginAnimation(UIElement.OpacityProperty, fade);
+        return fade;
+    }
+
     /// <summary>Background of a surface: plain, or a tiled fine grain. Either way it is one static brush with no running cost.</summary>
     public static Brush Surface(string hex, byte alpha)
     {

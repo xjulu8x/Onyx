@@ -35,7 +35,7 @@ public class ToggleSwitch : Border
     public void Set(bool isOn)
     {
         _isOn = isOn;
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        var ease = Theme.Settle;
         _knob.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(isOn ? 19 : 3, TimeSpan.FromMilliseconds(180)) { EasingFunction = ease });
         _bg.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(isOn ? On : Off, TimeSpan.FromMilliseconds(180)));
     }

@@ -46,7 +46,13 @@ public partial class App : Application
         // Our windows never take focus, so a context menu wouldn't notice clicks elsewhere on the screen.
         // While a menu is open, a mouse hook closes it on any click outside of it.
         EventManager.RegisterClassHandler(typeof(System.Windows.Controls.ContextMenu), System.Windows.Controls.ContextMenu.OpenedEvent,
-            new RoutedEventHandler((s, _) => MenuClickWatch.Start((System.Windows.Controls.ContextMenu)s)));
+            new RoutedEventHandler((s, _) =>
+            {
+                var menu = (System.Windows.Controls.ContextMenu)s;
+                MenuClickWatch.Start(menu);
+                // Menus fade in quickly instead of popping up.
+                menu.BeginAnimation(UIElement.OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(0, 1, Theme.Ms(110)));
+            }));
 
         // 2.0: the island hangs as a notch at the top edge, and the taskbar is a dock with apps only.
         if (Settings.Current.Layout < 2) { Settings.Current.IslandShape = 1; Settings.Current.TaskbarShape = 1; Settings.Current.Layout = 2; Settings.Current.Save(); }

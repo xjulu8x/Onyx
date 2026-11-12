@@ -68,6 +68,16 @@ public partial class IslandWindow : Window
         for (int i = 0; i < 6; i++) { SetExpanded(i % 2 == 0); await Task.Delay(1000); }
         Flash("Caps Lock an");
         await Task.Delay(1200);
+        // Popups: the network popup comes down from the island, the start menu rises from the dock.
+        var app = (App)Application.Current;
+        app.Flyout.Toggle(FlyoutKind.Network, activate: false, fromTop: true);
+        await Task.Delay(900);
+        app.Flyout.Toggle(FlyoutKind.Network, activate: false, fromTop: true);
+        await Task.Delay(700);
+        app.StartMenu.Toggle(activate: false);
+        await Task.Delay(900);
+        app.StartMenu.Toggle(activate: false);
+        await Task.Delay(700);
         ((App)Application.Current).Quit();
     }
     public void ApplyAlwaysExpanded() => SetExpanded(Settings.Current.AlwaysExpanded || _hovering);
@@ -115,7 +125,7 @@ public partial class IslandWindow : Window
 
     // ---------- tabs and pages ----------
 
-    private static readonly IEasingFunction OutEase = new CubicEase { EasingMode = EasingMode.EaseOut };
+    private static readonly IEasingFunction OutEase = Theme.Settle;
     private readonly ScaleTransform _contentScale = new(1, 1);
     private static readonly Brush Card = new SolidColorBrush(Color.FromArgb(0x10, 255, 255, 255));
     private static readonly Brush CardHover = new SolidColorBrush(Color.FromArgb(0x1C, 255, 255, 255));
@@ -263,21 +273,7 @@ public partial class IslandWindow : Window
     }
 
     /// <summary>Feedback on press, not on release: a quick, slight shrink that springs back.</summary>
-    private static void Press(FrameworkElement element)
-    {
-        var scale = new ScaleTransform(1, 1);
-        element.RenderTransform = scale;
-        element.RenderTransformOrigin = new Point(0.5, 0.5);
-        void To(double value, int ms)
-        {
-            var a = new DoubleAnimation(value, TimeSpan.FromMilliseconds(ms)) { EasingFunction = OutEase };
-            scale.BeginAnimation(ScaleTransform.ScaleXProperty, a);
-            scale.BeginAnimation(ScaleTransform.ScaleYProperty, a);
-        }
-        element.PreviewMouseLeftButtonDown += (_, _) => To(0.96, 90);
-        element.PreviewMouseLeftButtonUp += (_, _) => To(1, 160);
-        element.MouseLeave += (_, _) => To(1, 160);
-    }
+    private static void Press(FrameworkElement element) => Feedback.SetPress(element, true);
 
     // ---------- hints in the notch ----------
 

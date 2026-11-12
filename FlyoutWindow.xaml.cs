@@ -65,7 +65,7 @@ public partial class FlyoutWindow : Window
             FlyoutKind.Tray => BuildTray(),
             _ => BuildActionCenter(),
         };
-        Panel.Opacity = 0;
+        bool fromHidden = !IsVisible;
         ShowActivated = activate;
         Show();
         Scroller.MaxHeight = SystemParameters.WorkArea.Height - 70; // window margin + panel padding
@@ -73,8 +73,9 @@ public partial class FlyoutWindow : Window
         UpdateLayout();
         Reposition();
         if (activate) Win32.Activate(new WindowInteropHelper(this).Handle);
-        Panel.BeginAnimation(OpacityProperty, new DoubleAnimation(1, Theme.Ms(180)) { EasingFunction = Ease });
-        Slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(24, 0, Theme.Ms(280)) { EasingFunction = Ease });
+        // Opened from the island it comes down from the top, otherwise up from the taskbar, growing from that side.
+        Panel.RenderTransformOrigin = _fromTop ? new Point(0.5, 0) : new Point(_anchorX != null ? 0.5 : 1, 1);
+        Theme.Enter(Panel, Zoom, Slide, _fromTop ? -14 : 18, fromHidden);
     }
 
     private void Reposition()
@@ -92,11 +93,9 @@ public partial class FlyoutWindow : Window
         if (!IsVisible || _closing) return;
         _closing = true;
         _closedAt = DateTime.Now;
-        var fade = new DoubleAnimation(0, Theme.Ms(130));
+        var fade = Theme.Leave(Panel, Zoom, Slide, _fromTop ? -14 : 18); // back the way it came
         // The content is rebuilt on every open, so nothing has to stay in memory while closed.
         fade.Completed += (_, _) => { if (_closing) { Hide(); _closing = false; Host.Content = null; } };
-        Panel.BeginAnimation(OpacityProperty, fade);
-        Slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(16, Theme.Ms(130)));
     }
 
     private void Window_Deactivated(object sender, EventArgs e) => CloseFlyout();

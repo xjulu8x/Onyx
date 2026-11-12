@@ -328,11 +328,14 @@ public partial class TaskbarWindow : Window
     {
         if (_barShown && IsVisible) return;
         _barShown = true;
+        bool fromHidden = !IsVisible || Root.Opacity < 0.05;
         Show();
         Topmost = true;
         Native.BringTopmost(this);
+        // Rises from the bottom edge; if it was still sliding away it turns around from where it is.
+        if (fromHidden) { _barSlide.BeginAnimation(TranslateTransform.YProperty, null); _barSlide.Y = Theme.ReduceMotion ? 0 : 24; }
         Root.BeginAnimation(OpacityProperty, new DoubleAnimation(1, Theme.Ms(160)) { EasingFunction = Smooth });
-        _barSlide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(24, 0, Theme.Ms(220)) { EasingFunction = Smooth });
+        _barSlide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, Theme.Ms(260)) { EasingFunction = Theme.Settle });
     }
 
     private void HideBar()
@@ -342,7 +345,7 @@ public partial class TaskbarWindow : Window
         var fade = new DoubleAnimation(0, Theme.Ms(140));
         fade.Completed += (_, _) => { if (!_barShown) { Topmost = false; Hide(); } };
         Root.BeginAnimation(OpacityProperty, fade);
-        _barSlide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(24, Theme.Ms(140)));
+        _barSlide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(Theme.ReduceMotion ? 0 : 24, Theme.Ms(140)));
     }
 
     // While peeking, a click anywhere outside our own windows (e.g. into the game) ends the peek.
@@ -436,7 +439,6 @@ public partial class TaskbarWindow : Window
     [DllImport("user32.dll")] private static extern IntPtr SetWinEventHook(uint min, uint max, IntPtr mod, WinEventProc proc, uint pid, uint tid, uint flags);
     private WinEventProc _winEventProc; // kept alive for the GC
     private readonly Dictionary<string, AppButton> _buttons = new();
-    private static readonly IEasingFunction Spring = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.5 };
     private static readonly IEasingFunction Smooth = new CubicEase { EasingMode = EasingMode.EaseOut };
     private static readonly Brush IdleDot = new SolidColorBrush(Color.FromArgb(0xB0, 255, 255, 255));
     private int _tick;
@@ -526,8 +528,8 @@ public partial class TaskbarWindow : Window
         };
         btn.Root.MouseEnter += Hover_Enter;
         btn.Root.MouseLeave += Hover_Leave;
-        btn.Root.MouseLeftButtonDown += (_, _) => Press(btn, 0.84, 90, Smooth);
-        btn.Root.MouseLeftButtonUp += (_, _) => { Press(btn, 1, 260, Spring); AppClick(btn); };
+        btn.Root.MouseLeftButtonDown += (_, _) => Press(btn, 0.9, 90, Theme.Settle);
+        btn.Root.MouseLeftButtonUp += (_, _) => { Press(btn, 1, 220, Theme.Settle); AppClick(btn); }; // no bounce: a click carries no momentum
         btn.Root.MouseRightButtonUp += (_, e) => { AppMenu(btn.App, btn.Root); e.Handled = true; };
         return btn;
     }

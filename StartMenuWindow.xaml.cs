@@ -51,7 +51,7 @@ public partial class StartMenuWindow : Window
         Top = SystemParameters.WorkArea.Bottom - Height + 4;
         Search.Text = "";
         Build();
-        Panel.Opacity = 0;
+        bool fromHidden = !IsVisible;
         ShowActivated = activate;
         Show();
         if (activate)
@@ -60,19 +60,16 @@ public partial class StartMenuWindow : Window
             Search.Focus();
             Keyboard.Focus(Search);
         }
-        Panel.BeginAnimation(OpacityProperty, new DoubleAnimation(1, Theme.Ms(180)) { EasingFunction = Ease });
-        Slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(30, 0, Theme.Ms(280)) { EasingFunction = Ease });
+        Theme.Enter(Panel, Zoom, Slide, 22, fromHidden); // up out of the start button, growing from the bottom edge
     }
 
     private void CloseMenu()
     {
         if (!IsVisible || _closing) return;
         _closing = true;
-        var fade = new DoubleAnimation(0, Theme.Ms(140));
+        var fade = Theme.Leave(Panel, Zoom, Slide, 22);
         // The rows are rebuilt on every open, so they don't have to stay in memory while closed.
         fade.Completed += (_, _) => { if (_closing) { Hide(); _closing = false; Sections.Children.Clear(); } };
-        Panel.BeginAnimation(OpacityProperty, fade);
-        Slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(20, Theme.Ms(140)));
     }
 
     private void Window_Deactivated(object sender, EventArgs e) => CloseMenu();
