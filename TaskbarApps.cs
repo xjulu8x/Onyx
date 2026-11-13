@@ -103,7 +103,11 @@ public static class TaskbarApps
         var stamp = PinnedStamp();
         if (_pinned == null || stamp != _pinnedStamp) { _pinned = ReadPinned(); _pinnedStamp = stamp; }
 
-        var result = _pinned.Select(p => new AppEntry { Key = p.Key, Name = p.Name, LaunchPath = p.LaunchPath, Pinned = true, Icon = p.Icon }).ToList();
+        var s = Settings.Current;
+        var result = _pinned.Where(p => !s.HiddenPins.Contains(p.Key))
+            .Select(p => new AppEntry { Key = p.Key, Name = p.Name, LaunchPath = p.LaunchPath, Pinned = true, Icon = p.Icon }).ToList();
+        foreach (var own in s.OwnPins.Where(o => result.All(r => r.Key != o.Key)))
+            result.Add(new AppEntry { Key = own.Key, Name = own.Name, LaunchPath = own.LaunchPath, Pinned = true, Icon = PinIcon(own) });
         var byKey = result.ToDictionary(e => e.Key);
 
         foreach (var h in TopWindows())
@@ -145,6 +149,29 @@ public static class TaskbarApps
     }
 
     public static List<AppEntry> Pinned() => ReadPinned();
+
+    /// <summary>Puts an app on the dock. Windows pins that were taken off come back; anything else goes on Onyx's own list.</summary>
+    public static void Pin(AppEntry app)
+    {
+        var s = Settings.Current;
+        if (!s.HiddenPins.Remove(app.Key) && s.OwnPins.All(p => p.Key != app.Key))
+            s.OwnPins.Add(new PinItem { Key = app.Key, Name = app.Name, LaunchPath = app.LaunchPath });
+        s.Save();
+    }
+
+    /// <summary>Takes an app off the dock. Windows itself is not changed: its pins are only hidden here.</summary>
+    public static void Unpin(AppEntry app)
+    {
+        var s = Settings.Current;
+        if (s.OwnPins.RemoveAll(p => p.Key == app.Key) == 0 && !s.HiddenPins.Contains(app.Key)) s.HiddenPins.Add(app.Key);
+        s.Save();
+    }
+
+    private static ImageSource PinIcon(PinItem pin)
+    {
+        if (pin.LaunchPath.StartsWith(@"shell:AppsFolder\", StringComparison.OrdinalIgnoreCase)) return AppIcon(pin.LaunchPath[16..]);
+        return File.Exists(pin.LaunchPath) ? IconFor(pin.LaunchPath) ?? ShellIcon(pin.LaunchPath) : null;
+    }
 
     private static string PinnedStamp()
     {

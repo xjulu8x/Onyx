@@ -15,8 +15,8 @@ public partial class SettingsWindow : Window
 {
     [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr h, int attr, ref int value, int size);
 
-    private static readonly string[] BackgroundColors = { "#060608", "#0B1A36", "#1E1F23", "#383A40" };
-    private static readonly string[] BackgroundNames = { "Schwarz", "Dunkelblau", "Anthrazit", "Grau" };
+    private static readonly string[] BackgroundColors = { "#0A0A0A", "#0B1220", "#16171A", "#26282C" };
+    private static readonly string[] BackgroundNames = { "Schwarz", "Nachtblau", "Anthrazit", "Grau" };
     private static readonly string[] WidgetColors = { "#E6E6E6", "#8E8E8E", "#30D158", "#FFB340" };
     private static readonly string[] WidgetColorNames = { "Weiß", "Grau", "Grün", "Bernstein" };
     private static readonly Brush Selected = new SolidColorBrush(Color.FromRgb(0xE6, 0xE6, 0xE6)); // terminal look: the chosen item is inverted
@@ -244,7 +244,6 @@ public partial class SettingsWindow : Window
         var look = Section("Aussehen");
         Pick(look, "Farbe", BackgroundNames, Array.IndexOf(BackgroundColors, _s.TaskbarColor), i => { _s.TaskbarColor = BackgroundColors[i]; bar.ApplyLook(); });
         Slider(look, "Transparenz", 0, 1, () => _s.Transparency, v => { _s.TaskbarTransparency = Math.Round(v, 2); bar.ApplyLook(); }, v => $"{v * 100:0} %");
-        Pick(look, "Form", new[] { "Leiste", "Dock", "Inseln" }, _s.TaskbarShape, i => { _s.TaskbarShape = i; bar.ApplyLook(); });
 
         var behavior = Section("Verhalten");
         Switch(behavior, "Automatisch einklappen", _s.TaskbarAutoHide, v => { _s.TaskbarAutoHide = v; bar.ApplyAutoHide(); }, "Erscheint, wenn die Maus den unteren Rand berührt.");
@@ -252,7 +251,6 @@ public partial class SettingsWindow : Window
         var icons = Section("Inhalt");
         Pick(icons, "App-Symbole", new[] { "Farbig", "Weiß", "Grau", "Akzent" }, _s.IconTint, i => { _s.IconTint = i; bar.ApplyLook(); });
         Pick(icons, "App-Anzeige", new[] { "Strich", "Punkt", "Leuchten", "Aus" }, _s.IndicatorStyle, i => { _s.IndicatorStyle = i; bar.ApplyLook(); });
-        Pick(icons, "Apps", new[] { "Mittig", "Links" }, _s.TaskbarAppsLeft ? 1 : 0, i => { _s.TaskbarAppsLeft = i == 1; bar.ApplyLook(); });
 
         var size = Section("Größe");
         Slider(size, "Höhe", 38, 64, () => _s.TaskbarHeight, v => { _s.TaskbarHeight = Math.Round(v); bar.ApplyLook(); }, v => $"{v:0} px");
@@ -284,11 +282,17 @@ public partial class SettingsWindow : Window
         var cards = Section("Karten");
         foreach (var (key, label, hint) in new[]
         {
+            ("Stats", "System", "Netz, GPU, CPU, RAM und Laufwerke."), ("Temp", "CPU-Temperatur", null),
             ("Music", "Musik", "Cover, Tasten und Pegel."), ("Terminal", "Terminal", "fetch, cava, life, orb und rain."), ("Bonsai", "Bonsai", "Wächst, will gegossen werden."),
             ("Weather", "Wetter", "Von Open-Meteo, braucht einen Ort."), ("Clock", "Uhr", null), ("Calendar", "Kalender", null),
             ("Signal", "Signal", "Augen, Puls oder Uhr in Punkten."), ("Koi", "Koi-Teich", "Klick ins Wasser macht Wellen."),
         })
-            Switch(cards, label, _s.CardOn(key), v => { _s.Cards[key] = v; App.ApplyWidgetVisibility(); }, hint);
+            Switch(cards, label, _s.CardOn(key), v =>
+            {
+                _s.Cards[key] = v;
+                if (v && key == "Stats") foreach (var part in _s.Cards.Keys.Where(k => k.StartsWith("Stats-")).ToList()) _s.Cards.Remove(part); // also its single parts
+                App.ApplyWidgetVisibility();
+            }, hint);
 
         var weather = Section("Wetter");
         var place = Line("Ort", "Nur dieser Name geht an Open-Meteo, um das Wetter zu finden.");

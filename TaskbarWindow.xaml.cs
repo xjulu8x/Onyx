@@ -78,53 +78,23 @@ public partial class TaskbarWindow : Window
     }
 
     /// <summary>
-    /// Bar form: 0 = one bar across the screen, 1 = dock (only as wide as its content, centered),
-    /// 2 = separate islands for apps and tray. The window stays full width; its transparent parts let clicks through.
+    /// The dock is exactly as wide as its apps, centred. When an app is pinned, unpinned, opened or closed it grows or
+    /// shrinks smoothly from where it is. The window stays full width; its transparent parts let clicks through.
     /// </summary>
     private void UpdateShape()
     {
-        var s = Settings.Current;
-        bool islands = s.TaskbarShape == 2, dock = s.TaskbarShape == 1;
-        Bg.Visibility = islands ? Visibility.Collapsed : Visibility.Visible;
-        BgMid.Visibility = BgRight.Visibility = islands ? Visibility.Visible : Visibility.Collapsed;
-
-        if (dock)
-        {
-            const double gap = 10;
-            double total = gap + CenterPanel.ActualWidth + gap + RightPanel.ActualWidth + gap;
-            double x = Math.Max(0, (Root.ActualWidth - total) / 2);
-            Bg.HorizontalAlignment = CenterPanel.HorizontalAlignment = RightPanel.HorizontalAlignment = HorizontalAlignment.Left;
-            Bg.Width = total;
-            Bg.Margin = new Thickness(x, 0, 0, 0);
-            CenterPanel.Margin = new Thickness(x + gap, 0, 0, 0);
-            RightPanel.Margin = new Thickness(x + gap + CenterPanel.ActualWidth + gap, 0, 0, 0);
-            return;
-        }
-
-        Bg.HorizontalAlignment = HorizontalAlignment.Stretch;
-        Bg.Width = double.NaN;
-        Bg.Margin = new Thickness(0);
-        CenterPanel.HorizontalAlignment = s.TaskbarAppsLeft ? HorizontalAlignment.Left : HorizontalAlignment.Center;
-        CenterPanel.Margin = new Thickness(s.TaskbarAppsLeft ? 6 : 0, 0, 0, 0);
-        RightPanel.HorizontalAlignment = HorizontalAlignment.Right;
-        RightPanel.Margin = new Thickness(0, 0, 10, 0);
-
-        if (!islands) return;
-        // The panels may only just have moved, so measure after this layout pass.
-        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
-        {
-            Wrap(BgMid, CenterPanel);
-            Wrap(BgRight, RightPanel);
-        });
-    }
-
-    private void Wrap(Border surface, FrameworkElement content)
-    {
-        if (content.Visibility != Visibility.Visible || content.ActualWidth <= 0) { surface.Visibility = Visibility.Collapsed; return; }
-        double x = content.TranslatePoint(new Point(0, 0), Root).X;
-        surface.Visibility = Visibility.Visible;
-        surface.Margin = new Thickness(Math.Max(0, x - 6), 0, 0, 0);
-        surface.Width = content.ActualWidth + 12;
+        const double gap = 8;
+        Bg.Visibility = Visibility.Visible;
+        BgMid.Visibility = BgRight.Visibility = Visibility.Collapsed;
+        Bg.HorizontalAlignment = CenterPanel.HorizontalAlignment = HorizontalAlignment.Center;
+        Bg.Margin = CenterPanel.Margin = new Thickness(0);
+        double target = Math.Min(Root.ActualWidth, CenterPanel.ActualWidth + 2 * gap);
+        if (target <= 2 * gap) return;
+        if (double.IsNaN(Bg.Width) || Bg.ActualWidth <= 0 || Theme.Speed == 0) { Bg.BeginAnimation(WidthProperty, null); Bg.Width = target; return; }
+        if (Math.Abs(Bg.Width - target) < 0.5) return;
+        Bg.BeginAnimation(WidthProperty, new DoubleAnimation(Bg.ActualWidth, target, Theme.Ms(260)) { EasingFunction = Theme.Settle },
+            HandoffBehavior.SnapshotAndReplace);
+        Bg.Width = target;
     }
 
     /// <summary>Single-color symbols on request; the active app keeps its real colors, so it stands out.</summary>
@@ -577,6 +547,9 @@ public partial class TaskbarWindow : Window
             close.Click += (_, _) => app.Windows.ForEach(w => Win32.PostMessage(w, Win32.WM_CLOSE, IntPtr.Zero, IntPtr.Zero));
             menu.Items.Add(close);
         }
+        var pin = new MenuItem { Header = app.Pinned ? "Vom Dock lösen" : "Am Dock anheften", Icon = app.Pinned ? "\uE77A" : "\uE718" };
+        pin.Click += (_, _) => { if (app.Pinned) TaskbarApps.Unpin(app); else TaskbarApps.Pin(app); RefreshApps(); };
+        menu.Items.Add(pin);
         menu.IsOpen = true;
     }
 
@@ -592,6 +565,23 @@ public partial class TaskbarWindow : Window
             item.Click += (_, _) => onClick();
             menu.Items.Add(item);
         }
+        // Pin and unpin from here too: every open app that is not on the dock yet, and every pinned one.
+        var apps = _buttons.Values.Select(b => b.App).ToList();
+        MenuItem Sub(string glyph, string header, IEnumerable<AppEntry> list, Action<AppEntry> act)
+        {
+            var sub = new MenuItem { Header = header, Icon = glyph };
+            foreach (var app in list)
+            {
+                var entry = new MenuItem { Header = app.Name };
+                entry.Click += (_, _) => { act(app); RefreshApps(); };
+                sub.Items.Add(entry);
+            }
+            sub.IsEnabled = sub.Items.Count > 0;
+            return sub;
+        }
+        menu.Items.Add(Sub("\uE718", "App anheften", apps.Where(a => !a.Pinned), TaskbarApps.Pin));
+        menu.Items.Add(Sub("\uE77A", "App lösen", apps.Where(a => a.Pinned), TaskbarApps.Unpin));
+        menu.Items.Add(new Separator());
         Item("", "Task-Manager", () => Open("taskmgr.exe"));
         Item("", "Einstellungen", () => ((App)Application.Current).OpenSettings());
         menu.IsOpen = true;

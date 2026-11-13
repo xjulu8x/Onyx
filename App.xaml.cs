@@ -80,6 +80,8 @@ public partial class App : Application
         Flyout = new FlyoutWindow();
         KeyboardHook.WinKeyPressed += () => { Taskbar.Peek(); StartMenu.Toggle(); };
         KeyboardHook.Install();
+        // The × of the arrange mode: hide the widget and remember it, it comes back under Einstellungen → Widgets.
+        WidgetMover.Remove = w => { Settings.Current.Cards[KeyOf(w)] = false; Settings.Current.Save(); w.Hide(); };
         _widgets.Add(new StatsWindow());
         _widgets.Add(new TempWindow());
         // Cards of the terminal look (2.3)
@@ -226,6 +228,9 @@ public partial class App : Application
         Shutdown();
     }
 
+    /// <summary>Name under which a widget is switched on or off: cards by their key, the parts of the system widget by their title.</summary>
+    public static string KeyOf(Window w) => w switch { Card c => c.Key, StatsWindow => "Stats", TempWindow => "Temp", _ => w.Title };
+
     public T Widget<T>() where T : Window => _widgets.OfType<T>().FirstOrDefault();
 
     public void ApplyWidgetLayout()
@@ -238,7 +243,7 @@ public partial class App : Application
     public void ApplyWidgetVisibility()
     {
         foreach (var w in Widgets)
-            if (Settings.Current.ShowWidgets && (w is not Card card || Settings.Current.CardOn(card.Key))) w.Show(); else w.Hide();
+            if (Settings.Current.ShowWidgets && Settings.Current.CardOn(KeyOf(w))) w.Show(); else w.Hide();
         Pulse.Refresh();
     }
 
@@ -252,6 +257,8 @@ public partial class App : Application
         {
             w.Foreground = brush;
             if (w is Card card) card.SetAlpha(s.WidgetOpacity); else w.Opacity = s.WidgetOpacity;
+            // Same surface as dock and island: flat, or with the dot grid ("Oberfläche").
+            if (w.Content is System.Windows.Controls.Border frame) frame.Background = Theme.Surface("#0A0A0A", 0xF8);
             // Grows and shrinks around the right edge, so widgets next to the screen edge stay on screen.
             double right = w.Left + w.ActualWidth;
             ((FrameworkElement)w.Content).LayoutTransform = new System.Windows.Media.ScaleTransform(s.WidgetScale, s.WidgetScale);

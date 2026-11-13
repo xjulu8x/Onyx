@@ -51,6 +51,7 @@ public partial class IslandWindow : Window
         UpdateService.Changed += () => Dispatcher.BeginInvoke(ShowUpdateState);
         BuildPanel();
         KeyboardHook.StatusKey += OnStatusKey;
+        WidgetMover.Changed += ShowEditState;
         _glowTimer.Tick += (_, _) => GlowTick();
         ApplyLook();
         if (Settings.Current.AlwaysExpanded) SetExpanded(true, animate: false);
@@ -113,12 +114,30 @@ public partial class IslandWindow : Window
             Animate(Compact, OpacityProperty, 1, TimeSpan.FromMilliseconds(120 * k), FadeEase, 90 * k);
         }
         Expanded.IsHitTestVisible = expand;
+        Animate(EditTab, OpacityProperty, expand ? 1 : 0, TimeSpan.FromMilliseconds((expand ? 160 : 70) * k), FadeEase, expand ? 140 * k : 0);
+        EditTab.IsHitTestVisible = expand;
         // Cover and title belong to the notch and the start page; the activity page is fresh on every open and freed on close.
         _surface.ShowMedia(!expand || _page == 0);
         NotifyPage.Content = expand && _page == 2 ? BuildActivity() : null;
         ShowEqualizer();
         // The open page (player or settings) is kept, so hovering again continues where the user left off.
         if (expand) VolSlider.Refresh();
+    }
+
+    private void EditTab_Click(object sender, MouseButtonEventArgs e)
+    {
+        WidgetMover.SetEditing(!WidgetMover.Editing);
+        if (WidgetMover.Editing && !Settings.Current.ShowWidgets) { Settings.Current.ShowWidgets = true; Settings.Current.Save(); ((App)Application.Current).ApplyWidgetVisibility(); }
+    }
+
+    /// <summary>The tab shows the mode: inverted with a check mark while arranging.</summary>
+    private void ShowEditState()
+    {
+        bool on = WidgetMover.Editing;
+        EditTab.Background = on ? new SolidColorBrush(Color.FromRgb(0xE6, 0xE6, 0xE6)) : new SolidColorBrush(Color.FromRgb(0x0A, 0x0A, 0x0A));
+        EditGlyph.Foreground = on ? Brushes.Black : Brushes.White;
+        EditGlyph.Text = on ? "\uE73E" : "\uE70F";
+        EditTab.ToolTip = on ? "Fertig: Anordnung speichern" : "Widgets anordnen";
     }
 
     private void Settings_Click(object sender, RoutedEventArgs e) => ((App)Application.Current).OpenSettings();
@@ -419,7 +438,28 @@ public partial class IslandWindow : Window
     {
         var s = Settings.Current;
         var tint = Settings.ToColor(_heatText != null ? "#5A1010" : s.IslandColor, 0xFF, Color.FromRgb(0x06, 0x06, 0x08));
-        _surface.SetLook(tint, s.IslandOpacity, s.RimStyle >= 2 ? Theme.Accent : null);
+        // Rim: none (drawn in the body color), the thin line of the dock, or the accent color.
+        _surface.SetLook(tint, s.IslandOpacity, s.RimStyle == 0 ? tint : s.RimStyle >= 2 ? Theme.Accent : null);
+    }
+
+    /// <summary>Same dot grid as the dock: one faint dot every 8 pixels, drawn once into an image for the GPU.</summary>
+    private void SendGrid()
+    {
+        if (!Settings.Current.Grain) { _surface.SetGrid(null); return; }
+        double k = VisualTreeHelper.GetDpi(this).DpiScaleX * Settings.Current.IslandScale;
+        int w = (int)(WindowW * k), h = (int)(WindowH * k), step = (int)Math.Max(4, Math.Round(8 * k));
+        var px = new byte[w * h * 4];
+        // Columns centred on the pill, so the dots sit symmetric.
+        int start = (w / 2) % step;
+        for (int y = 0; y < h; y += step)
+            for (int x = start; x < w; x += step)
+            {
+                int i = (y * w + x) * 4;
+                px[i] = px[i + 1] = px[i + 2] = px[i + 3] = 0x18; // premultiplied white at about 9 %
+            }
+        var image = System.Windows.Media.Imaging.BitmapSource.Create(w, h, 96, 96, PixelFormats.Pbgra32, null, px, w * 4);
+        image.Freeze();
+        _surface.SetGrid(image);
     }
 
     /// <summary>Color, size and shape from the design settings.</summary>
@@ -427,6 +467,7 @@ public partial class IslandWindow : Window
     {
         var s = Settings.Current;
         ApplyColor();
+        SendGrid();
         // Form: 0 floating, 1 docked to the top edge, 2 capsule (narrower and taller, round cover)
         Island.Margin = new Thickness(0, s.IslandShape == 1 ? 0 : 8, 0, 0);
         Compact.Height = CompactH;
@@ -549,10 +590,21 @@ public partial class IslandWindow : Window
         DurText.Text = MediaService.Fmt(dur);
     }
 
+    /// <summary>The hairline in the notch; only touched when it moves by a whole pixel, so the window is rarely redrawn.</summary>
+    private void CompactProgress()
+    {
+        bool show = _media.HasSession && _media.Duration.TotalSeconds > 0 && _flash == null && _heatText == null;
+        CompactTrack.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        if (!show) return;
+        double width = Math.Round(CompactTrack.ActualWidth * Math.Clamp(_media.Position.TotalSeconds / _media.Duration.TotalSeconds, 0, 1));
+        if (Math.Abs(CompactFill.Width - width) >= 1) CompactFill.Width = width;
+    }
+
     private void FastTick()
     {
         _tick++;
         if (_expanded) UpdateProgress();
+        else CompactProgress();
         if (!_media.HasSession && _heatText == null && _flash == null && CompactTitle.Text != IdleText()) UpdateMedia();
         if (_tick % 8 == 0) KeepOnTop();
     }
@@ -571,10 +623,10 @@ public partial class IslandWindow : Window
     {
         var app = (App)Application.Current;
         var menu = new ContextMenu { PlacementTarget = Island, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
-        var settings = new MenuItem { Header = "Einstellungen", Icon = "E713" };
+        var settings = new MenuItem { Header = "Einstellungen", Icon = "\uE713" };
         settings.Click += (_, _) => app.OpenSettings();
         menu.Items.Add(settings);
-        var quit = new MenuItem { Header = "Beenden", Icon = "E7E8" };
+        var quit = new MenuItem { Header = "Beenden", Icon = "\uE7E8" };
         quit.Click += (_, _) => app.Quit();
         menu.Items.Add(quit);
         _menuOpen = true;

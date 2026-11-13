@@ -14,6 +14,7 @@ internal static class Native
     public const uint SWP_NOSIZE = 0x1, SWP_NOMOVE = 0x2, SWP_NOZORDER = 0x4, SWP_NOACTIVATE = 0x10;
     public static readonly IntPtr HWND_TOPMOST = new(-1);
     public static readonly IntPtr HWND_BOTTOM = new(1);
+    public static readonly IntPtr HWND_NOTOPMOST = new(-2);
 
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT { public int Left, Top, Right, Bottom; }
@@ -62,7 +63,7 @@ internal static class Native
             SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             HwndSource.FromHwnd(hwnd).AddHook((IntPtr h, int msg, IntPtr wp, IntPtr lp, ref bool handled) =>
             {
-                if (msg == WM_WINDOWPOSCHANGING)
+                if (msg == WM_WINDOWPOSCHANGING && !WidgetMover.Editing) // while arranging, the widgets come to the front
                 {
                     var pos = Marshal.PtrToStructure<WINDOWPOS>(lp);
                     pos.hwndInsertAfter = HWND_BOTTOM;

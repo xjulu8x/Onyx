@@ -4,6 +4,13 @@ using Microsoft.Win32;
 
 namespace DesktopOverlay;
 
+public class PinItem
+{
+    public string Key { get; set; }
+    public string Name { get; set; }
+    public string LaunchPath { get; set; }
+}
+
 public class Settings
 {
     public bool AlwaysExpanded { get; set; }
@@ -60,6 +67,10 @@ public class Settings
     public bool BonsaiWind { get; set; } = true;
     public bool BonsaiWinter { get; set; }
     public int SignalMode { get; set; } // 0 face, 1 pulse, 2 clock
+
+    // Pins of the dock (2.4): Onyx keeps its own list instead of changing the Windows taskbar.
+    public List<PinItem> OwnPins { get; set; } = new();
+    public List<string> HiddenPins { get; set; } = new(); // Windows pins taken off the dock
 
     // Time-of-day design and own themes
     public bool AutoTheme { get; set; }

@@ -56,6 +56,7 @@ internal sealed class IslandSurface
     private readonly DesktopWindowTarget _target; // the visuals disappear if this is collected
     private readonly ContainerVisual _pill;
     private readonly SpriteVisual _tint, _glow;
+    private readonly SpriteVisual _dots;
     private readonly SpriteVisual _art, _smallText, _bigText;
     private Vortice.Direct3D11.ID3D11Device _device; // kept alive with the images
     private Vortice.Direct3D11.ID3D11DeviceContext _context;
@@ -103,6 +104,9 @@ internal sealed class IslandSurface
         _tint = _compositor.CreateSpriteVisual();
         _tint.RelativeSizeAdjustment = Vector2.One;
         _pill.Children.InsertAtTop(_tint);
+        _dots = _compositor.CreateSpriteVisual();
+        _dots.RelativeSizeAdjustment = Vector2.One;
+        _pill.Children.InsertAtTop(_dots);
 
         var sheen = _compositor.CreateSpriteVisual();
         sheen.Brush = _compositor.CreateColorBrush(Color.FromArgb(0, 255, 255, 255)); // terminal look: flat, no sheen
@@ -273,6 +277,18 @@ internal sealed class IslandSurface
         _tint.Brush = _compositor.CreateColorBrush(Color.FromArgb(alpha, tint.R, tint.G, tint.B));
         var line = rim ?? System.Windows.Media.Color.FromRgb(0x3A, 0x3A, 0x3A);
         _rim.StrokeBrush = _compositor.CreateColorBrush(Color.FromArgb(0xFF, line.R, line.G, line.B)); // one thin even line, like the widgets
+    }
+
+    /// <summary>The dot grid of the dock on the body; null takes it away. The image is fixed to the top of the pill.</summary>
+    public void SetGrid(System.Windows.Media.Imaging.BitmapSource grid)
+    {
+        if (!MediaReady) return;
+        if (grid == null) { _dots.Brush = null; return; }
+        var brush = Upload(grid);
+        brush.Stretch = CompositionStretch.None;
+        brush.HorizontalAlignmentRatio = 0.5f;
+        brush.VerticalAlignmentRatio = 0;
+        _dots.Brush = brush;
     }
 
     public void SetGlow(float opacity) => _glow.Opacity = opacity;
