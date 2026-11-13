@@ -48,6 +48,19 @@ public class Settings
     public int WidgetGraph { get; set; } // 0 line, 1 bars, 2 rings
     public bool WidgetsFree { get; set; } // every block is its own widget
 
+    // Cards of the terminal look (2.3). Missing entries count as switched on.
+    public Dictionary<string, bool> Cards { get; set; } = new();
+    public bool CardOn(string key) => !Cards.TryGetValue(key, out var on) || on;
+    public string WeatherCity { get; set; } = "";
+    public double[] WeatherPlace { get; set; } // latitude, longitude of WeatherCity
+    public int TerminalMode { get; set; } = 4; // 0 fetch, 1 cava, 2 life, 3 orb, 4 rain
+    public int BonsaiSeed { get; set; }
+    public DateTime BonsaiWatered { get; set; }
+    public DateTime BonsaiPlanted { get; set; }
+    public bool BonsaiWind { get; set; } = true;
+    public bool BonsaiWinter { get; set; }
+    public int SignalMode { get; set; } // 0 face, 1 pulse, 2 clock
+
     // Time-of-day design and own themes
     public bool AutoTheme { get; set; }
     public string DayTheme { get; set; } = "Mono";

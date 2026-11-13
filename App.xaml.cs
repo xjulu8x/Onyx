@@ -31,6 +31,10 @@ public partial class App : Application
         // Test aid: "--update-now [sha256]" runs the update against the real release (optionally with a wrong checksum) and exits.
         var update = Array.IndexOf(e.Args, "--update-now");
         if (update >= 0) { TestUpdate(update + 1 < e.Args.Length ? e.Args[update + 1] : null); return; }
+        // Test aid: "--cards <dir>" only builds the desktop cards, lets them run a few seconds and saves each as a PNG.
+        // It touches neither the taskbar nor any hook, so it can run next to a normal Onyx.
+        var cards = Array.IndexOf(e.Args, "--cards");
+        if (cards >= 0 && cards + 1 < e.Args.Length) { RenderCards(e.Args[cards + 1]); return; }
         _single = new Mutex(false, "Onyx.SingleInstance");
         bool owned;
         // "--wait": started by RestartElevated, so give the old instance a moment to exit.
@@ -78,6 +82,8 @@ public partial class App : Application
         KeyboardHook.Install();
         _widgets.Add(new StatsWindow());
         _widgets.Add(new TempWindow());
+        // Cards of the terminal look (2.3)
+        _widgets.AddRange(new Window[] { new MusicCard(), new TerminalCard(), new BonsaiCard(), new WeatherCard(), new ClockCard(), new CalendarCard(), new SignalCard(), new KoiCard() });
         ApplyWidgetLayout();
         ApplyWidgetLook();
         TaskbarHider.Start();
@@ -181,6 +187,47 @@ public partial class App : Application
     /// <summary>The widget windows on screen: with "Einzeln" the stats window is replaced by its parts.</summary>
     private IEnumerable<Window> Widgets => _widgets.SelectMany(w => w is StatsWindow { Parts.Count: > 0 } stats ? stats.Parts : new[] { w });
 
+    private async void RenderCards(string dir)
+    {
+        Pulse.Force = true;
+        Theme.ApplyFont();
+        var list = new Window[] { new MusicCard(), new TerminalCard(), new BonsaiCard(), new WeatherCard(), new ClockCard(), new CalendarCard(), new SignalCard(), new KoiCard() };
+        var args = Environment.GetCommandLineArgs();
+        int only = Array.IndexOf(args, "--only");
+        if (only >= 0 && only + 1 < args.Length) { foreach (var w in list.Where(w => w.GetType().Name != args[only + 1])) w.Close(); list = list.Where(w => w.GetType().Name == args[only + 1]).ToArray(); }
+        foreach (var w in list) w.Show();
+        Pulse.Refresh();
+        System.IO.Directory.CreateDirectory(dir);
+        for (int shot = 0; shot < 2; shot++)
+        {
+            await Task.Delay(3000);
+            foreach (var w in list)
+            {
+                var el = (FrameworkElement)w.Content;
+                var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(el);
+                var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap((int)(el.ActualWidth * dpi.DpiScaleX), (int)(el.ActualHeight * dpi.DpiScaleY), dpi.PixelsPerInchX, dpi.PixelsPerInchY, System.Windows.Media.PixelFormats.Pbgra32);
+                rtb.Render(el);
+                var enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+                using var fs = System.IO.File.Create(System.IO.Path.Combine(dir, $"{w.GetType().Name}-{shot}.png"));
+                enc.Save(fs);
+            }
+            if (shot == 0 && list.OfType<TerminalCard>().FirstOrDefault() is { } term) term.Show(1);
+        }
+        try
+        {
+            var settings = new SettingsWindow { ShowActivated = false, Left = -3000 };
+            settings.Show();
+            settings.RenderPages(dir);
+            settings.Close();
+        }
+        catch (Exception ex) { System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "settings-error.txt"), ex.ToString()); }
+        if (Environment.GetCommandLineArgs().Contains("--hold")) await Task.Delay(30000); // test aid: keep running to measure the load
+        Shutdown();
+    }
+
+    public T Widget<T>() where T : Window => _widgets.OfType<T>().FirstOrDefault();
+
     public void ApplyWidgetLayout()
     {
         foreach (var stats in _widgets.OfType<StatsWindow>()) stats.ApplyLayout();
@@ -191,7 +238,8 @@ public partial class App : Application
     public void ApplyWidgetVisibility()
     {
         foreach (var w in Widgets)
-            if (Settings.Current.ShowWidgets) w.Show(); else w.Hide();
+            if (Settings.Current.ShowWidgets && (w is not Card card || Settings.Current.CardOn(card.Key))) w.Show(); else w.Hide();
+        Pulse.Refresh();
     }
 
     public void ApplyWidgetLook()
@@ -203,7 +251,7 @@ public partial class App : Application
         foreach (var w in Widgets)
         {
             w.Foreground = brush;
-            w.Opacity = s.WidgetOpacity;
+            if (w is Card card) card.SetAlpha(s.WidgetOpacity); else w.Opacity = s.WidgetOpacity;
             // Grows and shrinks around the right edge, so widgets next to the screen edge stay on screen.
             double right = w.Left + w.ActualWidth;
             ((FrameworkElement)w.Content).LayoutTransform = new System.Windows.Media.ScaleTransform(s.WidgetScale, s.WidgetScale);

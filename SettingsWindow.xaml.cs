@@ -280,6 +280,39 @@ public partial class SettingsWindow : Window
         Pick(look, "Farbe", WidgetColorNames, Array.IndexOf(WidgetColors, _s.WidgetColor), i => { _s.WidgetColor = WidgetColors[i]; App.ApplyWidgetLook(); });
         Pick(look, "CPU und RAM", new[] { "Linie", "Balken", "Ringe" }, _s.WidgetGraph, i => _s.WidgetGraph = i);
 
+
+        var cards = Section("Karten");
+        foreach (var (key, label, hint) in new[]
+        {
+            ("Music", "Musik", "Cover, Tasten und Pegel."), ("Terminal", "Terminal", "fetch, cava, life, orb und rain."), ("Bonsai", "Bonsai", "Wächst, will gegossen werden."),
+            ("Weather", "Wetter", "Von Open-Meteo, braucht einen Ort."), ("Clock", "Uhr", null), ("Calendar", "Kalender", null),
+            ("Signal", "Signal", "Augen, Puls oder Uhr in Punkten."), ("Koi", "Koi-Teich", "Klick ins Wasser macht Wellen."),
+        })
+            Switch(cards, label, _s.CardOn(key), v => { _s.Cards[key] = v; App.ApplyWidgetVisibility(); }, hint);
+
+        var weather = Section("Wetter");
+        var place = Line("Ort", "Nur dieser Name geht an Open-Meteo, um das Wetter zu finden.");
+        place.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(190) });
+        place.ColumnDefinitions.Add(new ColumnDefinition());
+        place.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var city = new TextBox
+        {
+            Text = _s.WeatherCity, FontFamily = Theme.Mono, FontSize = 12, Foreground = Brushes.White, CaretBrush = Brushes.White, BorderThickness = new Thickness(0), Padding = new Thickness(8, 6, 8, 6),
+            Background = Brushes.Transparent, VerticalContentAlignment = VerticalAlignment.Center,
+        };
+        var cityField = new Border { Background = Field, BorderBrush = Theme.Res("LineHi"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(2), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0), Child = city };
+        var use = Action("Übernehmen", () =>
+        {
+            _s.WeatherCity = city.Text.Trim();
+            _s.WeatherPlace = null;
+            _s.Save();
+            App.Widget<WeatherCard>()?.Refresh();
+        });
+        Grid.SetColumn(cityField, 1);
+        Grid.SetColumn(use, 2);
+        place.Children.Add(cityField);
+        place.Children.Add(use);
+        weather.Children.Add(place);
         var layout = Section("Anordnung");
         Pick(layout, "Aufteilung", new[] { "Ein Block", "Einzeln" }, _s.WidgetsFree ? 1 : 0, i => { _s.WidgetsFree = i == 1; App.ApplyWidgetLayout(); });
         ActionRow(layout, "Widgets verschieben", "Widgets mit der Maus an ihren Platz ziehen.", WidgetMover.Editing ? "Fertig" : "Anordnen", () =>

@@ -11,8 +11,9 @@ public partial class TempWindow : Window
         WidgetMover.Attach(this, GetType().Name);
         Loaded += (_, _) =>
         {
-            Left = SystemParameters.PrimaryScreenWidth - ActualWidth - 34;
-            Top = SystemParameters.WorkArea.Bottom - ActualHeight - 12;
+            // Under the system widget, so the cards of 2.3 have the lower right corner.
+            Left = SystemParameters.WorkArea.Right - ActualWidth - 16;
+            Top = SystemParameters.WorkArea.Top + 400;
         };
         var s = SystemMonitor.Instance;
         Vendor.Text = (s.CpuVendor ?? "").ToUpperInvariant();
