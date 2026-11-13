@@ -240,7 +240,7 @@ public partial class App : Application
                 Crosshair = new CrosshairWindow();
                 using (var spriteFile = System.IO.File.Create(System.IO.Path.Combine(dir, "sprite.png")))
                 {
-                    var big = new System.Windows.Media.Imaging.TransformedBitmap(PixelPet.Sprite(Settings.Current), new System.Windows.Media.ScaleTransform(8, 8));
+                    var big = new System.Windows.Media.Imaging.TransformedBitmap(PixelPet.Composite(Settings.Current), new System.Windows.Media.ScaleTransform(8, 8));
                     var png = new System.Windows.Media.Imaging.PngBitmapEncoder();
                     png.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(big));
                     png.Save(spriteFile);
@@ -256,6 +256,33 @@ public partial class App : Application
             settings.Close();
         }
         catch (Exception ex) { System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "settings-error.txt"), ex.ToString()); }
+        if (Environment.GetCommandLineArgs().Contains("--film"))
+        {
+            // Test aid: 16 frames of the character over 4 seconds side by side, to check its motion.
+            var pet = new PixelPet { Zoom = 1.6, Width = 360 };
+            var host = new Window { Width = 400, Height = 300, Left = -3000, Top = 0, WindowStyle = WindowStyle.None, ShowActivated = false, ShowInTaskbar = false, Content = pet, Background = System.Windows.Media.Brushes.Black };
+            host.Show();
+            pet.Running = true;
+            pet.Poke();
+            var frames = new List<System.Windows.Media.Imaging.BitmapSource>();
+            for (int i = 0; i < 16; i++)
+            {
+                await Task.Delay(250);
+                var shot = new System.Windows.Media.Imaging.RenderTargetBitmap((int)pet.ActualWidth, (int)pet.ActualHeight, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+                shot.Render(pet);
+                frames.Add(shot);
+            }
+            var sheet = new System.Windows.Media.DrawingVisual();
+            using (var g = sheet.RenderOpen())
+                for (int i = 0; i < frames.Count; i++) g.DrawImage(frames[i], new Rect(i % 4 * 360, i / 4 * frames[0].Height, 360, frames[0].Height));
+            var all = new System.Windows.Media.Imaging.RenderTargetBitmap(4 * 360, 4 * frames[0].PixelHeight, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+            all.Render(sheet);
+            var enc2 = new System.Windows.Media.Imaging.PngBitmapEncoder();
+            enc2.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(all));
+            using var film = System.IO.File.Create(System.IO.Path.Combine(dir, "film.png"));
+            enc2.Save(film);
+            host.Close();
+        }
         if (Environment.GetCommandLineArgs().Contains("--hold")) await Task.Delay(30000); // test aid: keep running to measure the load
         Shutdown();
     }

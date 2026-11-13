@@ -633,7 +633,7 @@ public partial class SettingsWindow : Window
     /// <summary>A tile with a small picture of a character look and its name; the chosen one is framed white.</summary>
     private static Border PictureTile(Settings look, string label, bool chosen, bool small = false)
     {
-        var image = new Image { Source = PixelPet.Sprite(look), Width = small ? 32 : 48, Height = small ? 40 : 60, Stretch = Stretch.Uniform };
+        var image = new Image { Source = PixelPet.Composite(look), Width = small ? 32 : 48, Height = small ? 40 : 60, Stretch = Stretch.Uniform };
         RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality); // shrunk tiles: averaging keeps the details
         var stack = new StackPanel();
         stack.Children.Add(image);

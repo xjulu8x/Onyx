@@ -269,7 +269,7 @@ public sealed class PixelPet : FrameworkElement
         _squash += (1 - _squash) * (1 - Math.Pow(0.65, k));
         if (_hop > 0) _squash = 1.05;
 
-        if (!Sleeping && --_blink < -Frames(2.5) - _random.Next(Frames(4))) _blink = Compact ? 1 : 2;
+        if (!Sleeping && --_blink < -Frames(2.5) - _random.Next(Frames(4))) _blink = 3; // half, closed, half: a soft blink
         _aura = music ? Math.Max(_aura * Math.Pow(0.85, k), level) : _aura * Math.Pow(0.9, k);
 
         // Ambient effects.
@@ -289,14 +289,18 @@ public sealed class PixelPet : FrameworkElement
         for (int i = _trail.Count - 1; i >= 0; i--) { var t = _trail[i]; t.Life -= 0.08 * k; if (t.Life <= 0) _trail.RemoveAt(i); else _trail[i] = t; }
 
         // Redraw only when the picture changes, so resting costs next to nothing (most of all in the notch).
+        Secondary(k, music && !Compact);
         _pose = CurrentPose(music && !Compact);
         var look = (Math.Round(_x * 2), Math.Round(_hop * 2), _bits.Count, _facing, Math.Round(_squash, 2), _trail.Count, _pose, Sleeping ? _frame / Frames(1) : 0);
-        if (Compact && look == _lastLook && _bits.Count == 0) return; // the big one keeps breathing
+        double moved = Math.Round(_earRot) + Math.Round(_armL) * 64 + Math.Round(_turn * 8) * 4096 + Math.Round(_hatLag) * 65536 + Math.Round(_footL * 3 + _footR * 7) * 1048576;
+        if (Compact && look == _lastLook && moved == _lastMoved && _bits.Count == 0) return; // the big one keeps breathing
+        _lastMoved = moved;
         _lastLook = look;
         InvalidateVisual();
     }
 
     private Pose _pose;
+    private double _lastMoved;
     private double _sink;
     private (double, double, int, int, double, int, Pose, int) _lastLook;
 
@@ -305,13 +309,65 @@ public sealed class PixelPet : FrameworkElement
         double p = Pixel;
         bool walking = Math.Abs(_vel) > 0.05;
         bool yawning = _act == Act.Yawn && _left > _actLength * 0.3;
+        _ = p;
         return new Pose(
-            Step: walking && (int)(_stride / (3.5 * p)) % 2 == 1,
-            Closed: Sleeping || _blink > 0 || yawning,
-            ArmsUp: dancing ? _armBeat % 2 == 0 : yawning,
+            Closed: Sleeping || _blink == 2 || yawning,
+            Half: _blink is 1 or 3,
             Open: dancing || yawning,
             Wave: _frame / Frames(0.4) % 2,
             Sit: (_act == Act.Sit || Sleeping) && !walking && !dancing);
+    }
+
+    // ---------- secondary motion: parts that follow the body on springs ----------
+
+    private double _earRot, _earVel, _hatLag, _hatRot, _hatVel, _armL, _armR, _footL, _footR, _turn = 1, _bodyY, _bodyVy;
+
+    /// <summary>
+    /// Ears and hat lag behind the body and swing back, arms swing with the steps or the music, feet lift in turn,
+    /// and turning around squeezes the character through its middle instead of flipping it. All per time, not per frame.
+    /// </summary>
+    private void Secondary(double k, bool dancing)
+    {
+        double p = Pixel, t = _frame / Fps;
+        bool walking = Math.Abs(_vel) > 0.05;
+        double phase = _stride / (3.5 * p) * Math.PI;
+        _sink += ((_pose.Sit ? 2 * p : 0) - _sink) * (1 - Math.Pow(0.65, k));
+
+        // Vertical speed of the body (hops and steps) drives the ears and the hat.
+        double bob = walking ? Math.Abs(Math.Sin(phase)) * p * 0.6 : 0;
+        double bodyY = _hop + bob - _sink;
+        double vy = (bodyY - _bodyY) / Math.Max(0.01, k);
+        _bodyVy += (vy - _bodyVy) * 0.5;
+        _bodyY = bodyY;
+
+        double Spring(ref double value, ref double velocity, double target, double stiffness, double damping)
+        {
+            velocity += (target - value) * stiffness * k;
+            velocity *= Math.Pow(damping, k);
+            value += velocity * k;
+            return value;
+        }
+
+        double sway = Sleeping ? 0 : Math.Sin(t * 1.3) * 2.5;
+        Spring(ref _earRot, ref _earVel, Math.Clamp(-_vel * 7 / Math.Max(1, p / 2) + _bodyVy * 1.6 + sway, -22, 22), 0.28, 0.62);
+        Spring(ref _hatRot, ref _hatVel, Math.Clamp(-_vel * 5 / Math.Max(1, p / 2), -14, 14), 0.3, 0.6);
+        _hatLag += (Math.Clamp(-_bodyVy * 0.35, -2.5 * p, 2.5 * p) - _hatLag) * (1 - Math.Pow(0.6, k));
+
+        double armL, armR;
+        bool yawning = _act == Act.Yawn && _left > _actLength * 0.3;
+        if (dancing) { armL = -70 + Math.Sin(t * 7.5) * 35; armR = -70 + Math.Sin(t * 7.5 + Math.PI) * 35; }
+        else if (yawning) armL = armR = -115;
+        else if (walking) { armL = Math.Sin(phase) * 24; armR = -Math.Sin(phase) * 24; }
+        else if (Sleeping) armL = armR = 8;
+        else { armL = Math.Sin(t * 1.6) * 4; armR = Math.Sin(t * 1.6 + 1) * 4; }
+        _armL += (armL - _armL) * (1 - Math.Pow(0.55, k));
+        _armR += (armR - _armR) * (1 - Math.Pow(0.55, k));
+
+        double liftL = walking ? Math.Max(0, Math.Sin(phase)) * 1.1 : 0, liftR = walking ? Math.Max(0, -Math.Sin(phase)) * 1.1 : 0;
+        _footL += (liftL - _footL) * (1 - Math.Pow(0.4, k));
+        _footR += (liftR - _footR) * (1 - Math.Pow(0.4, k));
+
+        _turn += (_facing - _turn) * (1 - Math.Pow(0.5, k));
     }
 
     // ---------- drawing ----------
@@ -349,16 +405,41 @@ public sealed class PixelPet : FrameworkElement
         double shadow = Math.Max(3, 10 - _hop / (2 * p)) * p;
         if (!Compact) dc.DrawRectangle(Frozen(Color.FromArgb(0x30, 255, 255, 255)), null, new Rect(_x + W * p / 2 - shadow, ActualHeight - 2, shadow * 2, Math.Max(1, p * 0.75)));
 
-        var image = Sprite(s, _pose);
         // Sitting down and getting up glide instead of jumping; walking bobs with each step; resting breathes.
-        _sink += ((_pose.Sit ? 2 * p : 0) - _sink) * 0.35;
         double t = _frame / Fps;
         double bob = Math.Abs(_vel) > 0.05 ? Math.Abs(Math.Sin(_stride / (3.5 * p) * Math.PI)) * p * 0.6 : 0;
         double cx = _x + W * p / 2, bottom = ActualHeight - (Compact ? 0 : 1) - _hop + _sink - bob;
         double breathe = 1 + Math.Sin(t * (Sleeping ? 1.6 : 2.4)) * (Sleeping ? 0.03 : 0.012);
+        // Turning: the character narrows through its middle and opens up the other way.
+        double turn = Math.Sign(_turn == 0 ? _facing : _turn) * Math.Max(0.12, Math.Abs(_turn));
         dc.PushTransform(new TranslateTransform(cx, bottom));
-        dc.PushTransform(new ScaleTransform(_facing * (2 - _squash), _squash * breathe));
-        dc.DrawImage(image, new Rect(-W * p / 2, -H * p, W * p, H * p));
+        dc.PushTransform(new ScaleTransform(turn * (2 - _squash), _squash * breathe));
+
+        var (gcx, gcy, grx, _, gtop, _, gbottom) = Geometry(Math.Clamp(s.PetShape, 0, Shapes.Length - 1));
+        var rect = new Rect(-W * p / 2, -H * p, W * p, H * p);
+        Point At(double gx, double gy) => new((gx - W / 2.0) * p, (gy + OY - H) * p); // grid point in the drawing space
+        void DrawPart(Part part, Transform move)
+        {
+            if (move != null) dc.PushTransform(move);
+            dc.DrawImage(Sprite(s, _pose, part), rect);
+            if (move != null) dc.Pop();
+        }
+        Transform Rotate(double angle, Point pivot) => new RotateTransform(angle, pivot.X, pivot.Y);
+
+        DrawPart(PixelPet.Part.Ears, Rotate(_earRot, At(16, gtop + 2)));
+        if (!_pose.Sit)
+        {
+            DrawPart(PixelPet.Part.FootL, new TranslateTransform(0, -_footL * p));
+            DrawPart(PixelPet.Part.FootR, new TranslateTransform(0, -_footR * p));
+        }
+        DrawPart(PixelPet.Part.Body, null);
+        DrawPart(PixelPet.Part.ArmL, Rotate(-_armL, At(gcx - grx + 1, gcy + 1.5)));
+        DrawPart(PixelPet.Part.ArmR, Rotate(_armR, At(gcx + grx - 1, gcy + 1.5)));
+        var hatMove = new TransformGroup();
+        hatMove.Children.Add(Rotate(_hatRot, At(16, gtop + 1)));
+        hatMove.Children.Add(new TranslateTransform(0, _hatLag));
+        DrawPart(PixelPet.Part.Hat, hatMove);
+        _ = gbottom;
         dc.Pop();
         dc.Pop();
 
@@ -400,7 +481,7 @@ public sealed class PixelPet : FrameworkElement
 
     // ---------- the sprite ----------
 
-    private readonly record struct Pose(bool Step, bool Closed, bool ArmsUp, bool Open, int Wave, bool Sit);
+    private readonly record struct Pose(bool Closed, bool Half, bool Open, int Wave, bool Sit);
 
     /// <summary>Fine pixels per grid pixel: shapes, outline and shading are drawn at twice the grid, so curves stay round and detailed.</summary>
     private const int S = 2;
@@ -408,13 +489,32 @@ public sealed class PixelPet : FrameworkElement
     private static readonly Dictionary<string, BitmapSource> SpriteCache = new();
 
     /// <summary>The picture for this look and pose; built once and kept, so drawing a frame is just one image.</summary>
-    public static BitmapSource Sprite(Settings s, object poseObj = null)
+    public static BitmapSource Sprite(Settings s, object poseObj = null, Part part = Part.Body)
     {
         var pose = poseObj is Pose ps ? ps : default;
-        string key = $"{s.PetShape}|{s.PetEars}|{s.PetEyes}|{s.PetMouth}|{s.PetPattern}|{s.PetHat}|{s.PetColor}|{s.PetColor2}|{s.PetEyeColor}|{s.PetOutline}|{s.PetCheeks}|{s.PetAccessory}|{s.PetShading}|{pose}";
+        if (part != Part.Body) pose = pose with { Closed = false, Half = false, Open = false, Wave = 0 }; // only the body changes with the pose
+        string key = $"{s.PetShape}|{s.PetEars}|{s.PetEyes}|{s.PetMouth}|{s.PetPattern}|{s.PetHat}|{s.PetColor}|{s.PetColor2}|{s.PetEyeColor}|{s.PetOutline}|{s.PetCheeks}|{s.PetAccessory}|{s.PetShading}|{pose}|{part}";
         if (SpriteCache.TryGetValue(key, out var cached)) return cached;
-        if (SpriteCache.Count > 300) SpriteCache.Clear();
-        var grid = Build(s, pose);
+        if (SpriteCache.Count > 400) SpriteCache.Clear();
+        return SpriteCache[key] = ToImage(s, Build(s, pose, part));
+    }
+
+    /// <summary>All parts in one picture, for the small tiles in the settings.</summary>
+    public static BitmapSource Composite(Settings s)
+    {
+        string key = "all|" + string.Join("|", typeof(Settings).GetProperties().Where(p => p.Name.StartsWith("Pet")).Select(p => p.GetValue(s)));
+        if (SpriteCache.TryGetValue(key, out var cached)) return cached;
+        var all = new char[H * S, W * S];
+        foreach (var part in new[] { Part.Ears, Part.FootL, Part.FootR, Part.Body, Part.ArmL, Part.ArmR, Part.Hat })
+        {
+            var g = Build(s, default, part);
+            for (int y = 0; y < H * S; y++) for (int x = 0; x < W * S; x++) if (g[y, x] != '\0' && (all[y, x] == '\0' || g[y, x] != 'O' && g[y, x] != 'o')) all[y, x] = g[y, x];
+        }
+        return SpriteCache[key] = ToImage(s, all);
+    }
+
+    private static BitmapSource ToImage(Settings s, char[,] grid)
+    {
         int fw = W * S, fh = H * S;
         var px = new byte[fw * fh * 4];
         var body = Settings.ToColor(s.PetColor, 0xFF, Colors.White);
@@ -446,7 +546,7 @@ public sealed class PixelPet : FrameworkElement
             }
         var image = BitmapSource.Create(fw, fh, 96, 96, PixelFormats.Pbgra32, null, px, fw * 4);
         image.Freeze();
-        return SpriteCache[key] = image;
+        return image;
     }
 
     private static readonly Dictionary<string, int> TopCache = new();
@@ -456,9 +556,14 @@ public sealed class PixelPet : FrameworkElement
     {
         string key = $"{s.PetShape}|{s.PetEars}|{s.PetHat}|{s.PetOutline}";
         if (TopCache.TryGetValue(key, out var top)) return top;
-        var grid = Build(s, default);
-        top = 0;
-        while (top < H * S - 1 && Enumerable.Range(0, W * S).All(x => grid[top, x] == '\0')) top++;
+        top = H * S - 1;
+        foreach (var part in new[] { Part.Body, Part.Ears, Part.Hat })
+        {
+            var grid = Build(s, default, part);
+            int row = 0;
+            while (row < top && Enumerable.Range(0, W * S).All(x => grid[row, x] == '\0')) row++;
+            top = Math.Min(top, row);
+        }
         // Arms up while dancing reach a little higher; keep one row for them.
         return TopCache[key] = Math.Max(0, top / S - 1);
     }
@@ -468,7 +573,20 @@ public sealed class PixelPet : FrameworkElement
 
     private static double Sq(double v) => v * v;
 
-    private static char[,] Build(Settings s, Pose pose)
+    /// <summary>Body parts drawn on their own, so each can move with its own spring.</summary>
+    public enum Part { Body, Ears, Hat, ArmL, ArmR, FootL, FootR }
+
+    /// <summary>Centre, radii, top of head, eye line and bottom of a body shape, in grid units.</summary>
+    private static (double Cx, double Cy, double Rx, double Ry, int Top, int EyeY, int Bottom) Geometry(int shape) => shape switch
+    {
+        1 => (16.0, 19.5, 11.0, 10.5, 9, 17, 30),
+        2 => (16.0, 18.0, 9.0, 12.0, 6, 15, 30),
+        3 => (16.0, 17.0, 11.0, 11.0, 5, 15, 29),
+        4 => (16.0, 21.0, 12.0, 9.0, 12, 19, 30),
+        _ => (16.0, 19.0, 11.0, 10.0, 9, 17, 29),
+    };
+
+    private static char[,] Build(Settings s, Pose pose, Part part = Part.Body)
     {
         int FW = W * S, FH = H * S;
         var g = new char[FH, FW];
@@ -492,17 +610,10 @@ public sealed class PixelPet : FrameworkElement
         void Mirror(int x, int y, char c) { Set(x, y, c); Set(W - 1 - x, y, c); }
 
         // Body geometry per shape: centre, radii, top of head, eye line, bottom.
-        var (cx, cy, rx, ry, top, eyeY, bottom) = shape switch
-        {
-            1 => (16.0, 19.5, 11.0, 10.5, 9, 17, 30),
-            2 => (16.0, 18.0, 9.0, 12.0, 6, 15, 30),
-            3 => (16.0, 17.0, 11.0, 11.0, 5, 15, 29),
-            4 => (16.0, 21.0, 12.0, 9.0, 12, 19, 30),
-            _ => (16.0, 19.0, 11.0, 10.0, 9, 17, 29),
-        };
+        var (cx, cy, rx, ry, top, eyeY, bottom) = Geometry(shape);
 
         // Ears, behind the body.
-        switch (s.PetEars)
+        if (part == Part.Ears) switch (s.PetEars)
         {
             case 1: case 6:
                 // Pointed ears as real triangles, with a lighter inner ear.
@@ -544,7 +655,7 @@ public sealed class PixelPet : FrameworkElement
         }
 
         // Body.
-        Fill(0, top - 1, W, bottom + 1.5, (px, py) => shape switch
+        if (part == Part.Body) Fill(0, top - 1, W, bottom + 1.5, (px, py) => shape switch
         {
             1 => px >= cx - rx && px <= cx + rx && py >= top && py <= bottom && !(Corner(px, py, cx - rx + 4, top + 4) || Corner(px, py, cx + rx - 4, top + 4) || Corner(px, py, cx - rx + 4, bottom - 4) || Corner(px, py, cx + rx - 4, bottom - 4)),
             3 => py <= 16 ? Sq((px - cx) / rx) + Sq((py - 16.5) / 11.5) <= 1 : px >= cx - rx && px <= cx + rx && py <= bottom - 1.6 + 1.6 * Math.Cos((px - 5) * Math.PI / 4 + pose.Wave * Math.PI),
@@ -554,15 +665,14 @@ public sealed class PixelPet : FrameworkElement
             ((px < ccx && ccx < cx) || (px > ccx && ccx > cx)) && ((py < ccy && ccy < cy) || (py > ccy && ccy > cy)) && Sq(px - ccx) + Sq(py - ccy) > 16;
 
         // Feet (walking lifts one) and little arms (up while dancing).
-        if (shape != 3 && !pose.Sit)
+        // Feet and arms are parts of their own; they are lifted and swung while drawing.
+        if (shape != 3 && !pose.Sit && part is Part.FootL or Part.FootR)
         {
             char foot = s.PetMouth == 6 ? 'N' : 'B'; // a beak comes with orange feet, like a penguin
-            Ellipse(11, bottom + 1 - (pose.Step ? 0.8 : 0), 3.1, 1.7, foot);
-            Ellipse(21, bottom + 1 - (pose.Step ? 0 : 0.8), 3.1, 1.7, foot);
+            Ellipse(part == Part.FootL ? 11 : 21, bottom + 1, 3.1, 1.7, foot);
         }
-        double armY = pose.ArmsUp ? cy - 4 : cy + 2;
-        Ellipse(cx - rx - 0.3, armY, 2.1, 1.6, 'B');
-        Ellipse(cx + rx + 0.3, pose.Open && !pose.ArmsUp ? cy - 4 : cy + 2, 2.1, 1.6, 'B');
+        if (part == Part.ArmL) Ellipse(cx - rx - 0.3, cy + 2, 2.1, 1.6, 'B');
+        if (part == Part.ArmR) Ellipse(cx + rx + 0.3, cy + 2, 2.1, 1.6, 'B');
 
         // Light from above: two light and two shade steps, dithered where they meet, and a darker rim at the bottom.
         var shaded = (char[,])g.Clone();
@@ -586,7 +696,7 @@ public sealed class PixelPet : FrameworkElement
             }
         g = shaded;
         // A soft shine on the upper left of the body.
-        if (s.PetShading > 0 && shape != 1)
+        if (s.PetShading > 0 && shape != 1 && part == Part.Body)
             Fill(cx - rx * 0.7, cy - ry * 0.9, cx - rx * 0.1, cy - ry * 0.3, (x, y) => Sq((x - (cx - rx * 0.42)) / 1.6) + Sq((y - (cy - ry * 0.62)) / 0.9) <= 1 && GetF((int)(x * S), (int)((y + OY) * S)) != '\0', 'l');
 
         // Pattern in the second color, keeping the shading.
@@ -597,7 +707,7 @@ public sealed class PixelPet : FrameworkElement
         {
             for (int fy = 0; fy < FH; fy++) for (int fx = 0; fx < FW; fx++) if (inside(GX(fx), GY(fy))) PaintF(fx, fy);
         }
-        switch (s.PetPattern)
+        if (part == Part.Body) switch (s.PetPattern)
         {
             case 1: PaintWhere((x, y) => Sq((x - cx) / (rx * 0.45)) + Sq((y - (cy + ry * 0.68)) / (ry * 0.3)) <= 1); break;
             case 2: PaintWhere((x, y) => (int)Math.Floor(y - top) % 3 == 0 && Math.Abs(x - cx) > rx * 0.45 - Math.Sin(y) * 0.6); break;
@@ -614,6 +724,8 @@ public sealed class PixelPet : FrameworkElement
                 break;
         }
 
+        if (part == Part.Body)
+        {
         // Face: eyes with a glint, drawn on the fine grid.
         int e1 = shape == 2 ? 12 : 11, e2 = shape == 2 ? 20 : 21, ey = eyeY;
         void Eye(int ex)
@@ -658,6 +770,10 @@ public sealed class PixelPet : FrameworkElement
             else { Ellipse(10.5, ey - 0.8, 1, 0.6, 'W'); Ellipse(12.5, ey - 0.8, 0.4, 0.4, 'W'); }
         }
         else { Eye(e1); Eye(e2); }
+        // Half-closed lids, for a soft blink.
+        if (pose.Half && !pose.Closed && s.PetEyes != 4)
+            foreach (int ex in new[] { e1, e2 })
+                Fill(ex - 3.5, ey - 3.5, ex + 3, ey + 0.4, (x, y) => y < ey + 0.3 && GetF((int)(x * S), (int)((y + OY) * S)) is 'E' or 'e' or 'W' or 'Y', 'S');
 
         // Mouth on the fine grid: soft curves instead of steps.
         double my = ey + (s.PetEyes == 4 ? 4 : 5);
@@ -717,8 +833,9 @@ public sealed class PixelPet : FrameworkElement
                 break;
         }
 
+        }
         // Hat on top.
-        switch (s.PetHat)
+        if (part == Part.Hat) switch (s.PetHat)
         {
             case 1: // cap with brim
                 Fill(7, top - 5, 26, top, (x, y) => Sq((x - 16) / 8.6) + Sq((y - top) / 4.6) <= 1 && y <= top - 0.2, 'H');
@@ -739,11 +856,11 @@ public sealed class PixelPet : FrameworkElement
                 Ellipse(12.5, top - 2, 0.8, 0.8, 'R'); Ellipse(19.5, top - 2, 0.8, 0.8, 'R'); Ellipse(16, top - 2, 1, 1, 'J');
                 break;
             case 3: // headphones with a padded band
-                Fill(0, top - 6, W, ey - 2, (x, y) => { double d = Math.Sqrt(Sq((x - 16) / 13.5) + Sq((y - (ey + 1)) / (ey + 1 - top + 5))); return d > 0.92 && d <= 1.02; }, 'D');
-                Fill(0, ey - 4, 5, ey + 4, (x, y) => Sq((x - 2.6) / 2) + Sq((y - ey) / 3.6) <= 1, 'D');
-                Fill(27, ey - 4, W, ey + 4, (x, y) => Sq((x - 29.4) / 2) + Sq((y - ey) / 3.6) <= 1, 'D');
-                Fill(0, ey - 3, 5, ey + 3, (x, y) => Sq((x - 2.8) / 1) + Sq((y - ey) / 2.6) <= 1, 'H');
-                Fill(27, ey - 3, W, ey + 3, (x, y) => Sq((x - 29.2) / 1) + Sq((y - ey) / 2.6) <= 1, 'H');
+                Fill(0, top - 6, W, eyeY - 2, (x, y) => { double d = Math.Sqrt(Sq((x - 16) / 13.5) + Sq((y - (eyeY + 1)) / (eyeY + 1 - top + 5))); return d > 0.92 && d <= 1.02; }, 'D');
+                Fill(0, eyeY - 4, 5, eyeY + 4, (x, y) => Sq((x - 2.6) / 2) + Sq((y - eyeY) / 3.6) <= 1, 'D');
+                Fill(27, eyeY - 4, W, eyeY + 4, (x, y) => Sq((x - 29.4) / 2) + Sq((y - eyeY) / 3.6) <= 1, 'D');
+                Fill(0, eyeY - 3, 5, eyeY + 3, (x, y) => Sq((x - 2.8) / 1) + Sq((y - eyeY) / 2.6) <= 1, 'H');
+                Fill(27, eyeY - 3, W, eyeY + 3, (x, y) => Sq((x - 29.2) / 1) + Sq((y - eyeY) / 2.6) <= 1, 'H');
                 break;
             case 4: // knitted beanie with a pom-pom
                 Fill(6, top - 6, 26, top + 1.5, (x, y) => Sq((x - 16) / 9.2) + Sq((y - (top + 1)) / 6.6) <= 1 && y <= top + 1.3, 'H');
