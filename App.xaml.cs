@@ -238,7 +238,15 @@ public partial class App : Application
             {
                 // Never shown: the panel is laid out and drawn into images only.
                 Crosshair = new CrosshairWindow();
+                using (var spriteFile = System.IO.File.Create(System.IO.Path.Combine(dir, "sprite.png")))
+                {
+                    var big = new System.Windows.Media.Imaging.TransformedBitmap(PixelPet.Sprite(Settings.Current), new System.Windows.Media.ScaleTransform(8, 8));
+                    var png = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                    png.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(big));
+                    png.Save(spriteFile);
+                }
                 var island = new IslandWindow();
+                Island = island;
                 island.ForceExpand();
                 island.RenderPages(dir);
             }

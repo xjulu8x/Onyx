@@ -34,6 +34,8 @@
                                FontFamily="{StaticResource Mono}" FontSize="11" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
                     <!-- Room for the equalizer, which the surface draws on the GPU -->
                     <Border Grid.Column="2" Width="24"/>
+                    <!-- Without music the pixel character lives here, walking or resting; the time moves to the right -->
+                    <local:PixelPet x:Name="NotchPet" Compact="True" Grid.ColumnSpan="3" Height="32" VerticalAlignment="Bottom" Margin="4,0,58,1" Visibility="Collapsed"/>
                     <!-- How far the song is: a hairline under the title -->
                     <Grid x:Name="CompactTrack" Grid.Column="1" Grid.ColumnSpan="2" Height="2" VerticalAlignment="Bottom" Margin="9,0,2,5" Visibility="Collapsed">
                         <Border Background="#33FFFFFF"/>

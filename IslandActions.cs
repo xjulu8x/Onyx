@@ -89,8 +89,8 @@ public partial class IslandWindow
         _crossValue.Text = on ? "AN" : "AUS";
         _crossTile.BorderBrush = on ? Theme.AccentBrush : Theme.Res("Line");
         var s = Settings.Current;
-        PetTag.Text = $"+ {s.PetName.ToUpperInvariant()} / {PixelPet.Kinds[Math.Clamp(s.PetKind, 0, 2)].ToUpperInvariant()}";
-        PetMood.Text = _media.IsPlaying ? "♪ TANZT" : "CHILLT";
+        PetTag.Text = $"+ {s.PetName.ToUpperInvariant()} / {PixelPet.Shapes[Math.Clamp(s.PetShape, 0, PixelPet.Shapes.Length - 1)].ToUpperInvariant()}";
+        PetMood.Text = _media.IsPlaying && s.PetDance ? "♪ TANZT" : s.PetBehavior == 2 ? "SCHLÄFT" : "CHILLT";
     }
 
     private void ResolutionMenu(FrameworkElement target)
@@ -119,7 +119,37 @@ public partial class IslandWindow
     }
 
     /// <summary>The character only moves while it can be seen: island open on the start page.</summary>
-    private void ShowPet() => Pet.Running = _expanded && _page == 0;
+    private void ShowPet()
+    {
+        Pet.Running = _expanded && _page == 0;
+        UpdateNotchPet();
+    }
+
+    /// <summary>Without music the small island shows the character instead of the cover, the time moves to the right.</summary>
+    private bool NotchPetOn => Settings.Current.PetInNotch && !_expanded && !_media.HasSession && _flash == null && _heatText == null;
+
+    private bool _notchPetShown;
+
+    private void UpdateNotchPet()
+    {
+        bool on = NotchPetOn;
+        NotchPet.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        NotchPet.Running = on;
+        if (on == _notchPetShown) return;
+        _notchPetShown = on;
+        _surface.ShowMedia(!on && (!_expanded || _page == 0));
+        MoveMedia(animate: false);
+        ShowEqualizer();
+    }
+
+    /// <summary>Settings of the character changed: both pictures are drawn again.</summary>
+    public void PetChanged()
+    {
+        Pet.InvalidateVisual();
+        NotchPet.InvalidateVisual();
+        UpdateNotchPet();
+        RefreshActions();
+    }
 
     /// <summary>After a change of resolution or screen: fit the island to the new size.</summary>
     public void ScreenChanged()

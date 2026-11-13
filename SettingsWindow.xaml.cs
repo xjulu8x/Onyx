@@ -46,6 +46,7 @@ public partial class SettingsWindow : Window
             ("", "Allgemein", General), ("", "Aussehen", Look), ("", "Taskleiste", Taskbar),
             ("", "Island", Island), ("", "Widgets", Widgets), ("", "Themes", Themes), ("", "Effekte", Effects),
             ("\uE7FC", "Spiel", Game),
+            ("\uE77B", "Charakter", Character),
         };
         for (int i = 0; i < _pages.Length; i++) Nav.Children.Add(NavItem(i));
         Show(_lastPage);
@@ -411,26 +412,254 @@ public partial class SettingsWindow : Window
         var mode = Display.Current();
         d.Children.Add(new TextBlock { Text = $"AKTUELL {mode}  ·  WECHSELN ÜBER DIE ISLAND", FontFamily = Theme.Mono, FontSize = 10, Foreground = Dim, Margin = new Thickness(0, 6, 0, 10) });
 
-        var p = Section("Charakter");
-        Pick(p, "Art", PixelPet.Kinds, _s.PetKind, i => _s.PetKind = i);
-        Pick(p, "Farbe", PixelPet.ColorNames, Array.IndexOf(PixelPet.Colors, _s.PetColor), i => _s.PetColor = PixelPet.Colors[i]);
-        Pick(p, "Hut", PixelPet.Hats, _s.PetHat, i => _s.PetHat = i);
-        var row = Line("Name");
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(190) });
-        row.ColumnDefinitions.Add(new ColumnDefinition());
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+    }
+
+    // ---------- character ----------
+
+    private void Character()
+    {
+        // ---- stage: big live preview on the left, name, templates and quick keys on the right ----
+        var preview = new PixelPet { Zoom = 2.2, Margin = new Thickness(0, 4, 0, 0) };
+        var stage = new Border
+        {
+            Background = Theme.DotGrid(Color.FromRgb(0x0C, 0x0C, 0x0E), 0x20), BorderBrush = Theme.Res("Line"), BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(2), Padding = new Thickness(14, 8, 14, 6), Child = preview,
+        };
+        var tag = new TextBlock { FontFamily = Theme.Mono, FontSize = 10, Foreground = Dim, Margin = new Thickness(2, 0, 0, 6) };
+        var tiles = new List<Action>(); // every picture tile redraws itself when the character changes
+        void Changed()
+        {
+            tag.Text = $"+ {_s.PetName.ToUpperInvariant()} · LIVE-VORSCHAU · KLICKEN ZUM ANTIPPEN";
+            preview.InvalidateVisual();
+            App.Island?.PetChanged();
+            foreach (var refresh in tiles) refresh();
+        }
+        preview.Loaded += (_, _) => preview.Running = true;
+
+        var top = new Grid();
+        top.ColumnDefinitions.Add(new ColumnDefinition());
+        top.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
+        top.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(220) });
+        top.Children.Add(stage);
+
+        var side = new StackPanel();
+        Grid.SetColumn(side, 2);
+        top.Children.Add(side);
+        side.Children.Add(new TextBlock { Text = "NAME", FontFamily = Theme.Mono, FontSize = 9.5, Foreground = Dim, Margin = new Thickness(0, 0, 0, 4) });
         var name = new TextBox
         {
-            Text = _s.PetName, MaxLength = 12, FontFamily = Theme.Mono, FontSize = 12, Foreground = Brushes.White, CaretBrush = Brushes.White, BorderThickness = new Thickness(0),
-            Padding = new Thickness(8, 6, 8, 6), Background = Brushes.Transparent, VerticalContentAlignment = VerticalAlignment.Center,
+            Text = _s.PetName, MaxLength = 12, FontFamily = Theme.Mono, FontSize = 13, FontWeight = FontWeights.Bold, Foreground = Brushes.White, CaretBrush = Brushes.White,
+            BorderThickness = new Thickness(0), Padding = new Thickness(8, 6, 8, 6), Background = Brushes.Transparent,
         };
-        var field = new Border { Background = Field, BorderBrush = Theme.Res("LineHi"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(2), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0), Child = name };
-        var use = Action("Übernehmen", () => { _s.PetName = string.IsNullOrWhiteSpace(name.Text) ? "Pixel" : name.Text.Trim(); _s.Save(); });
-        Grid.SetColumn(field, 1);
-        Grid.SetColumn(use, 2);
-        row.Children.Add(field);
-        row.Children.Add(use);
-        p.Children.Add(row);
+        name.TextChanged += (_, _) => { _s.PetName = string.IsNullOrWhiteSpace(name.Text) ? "Pixel" : name.Text.Trim(); Changed(); };
+        name.LostFocus += (_, _) => _s.Save();
+        side.Children.Add(new Border { Background = Field, BorderBrush = Theme.Res("LineHi"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(2), Child = name });
+
+        side.Children.Add(new TextBlock { Text = "VORLAGEN", FontFamily = Theme.Mono, FontSize = 9.5, Foreground = Dim, Margin = new Thickness(0, 12, 0, 4) });
+        var gallery = new System.Windows.Controls.Primitives.UniformGrid { Columns = 4 };
+        foreach (var (presetName, apply) in PixelPet.Presets)
+        {
+            var look = PixelPet.Copy(_s);
+            apply(look);
+            var tile = PictureTile(look, presetName, false, small: true);
+            tile.MouseLeftButtonUp += (_, _) => { apply(_s); _s.Save(); Reload(); };
+            gallery.Children.Add(tile);
+        }
+        side.Children.Add(gallery);
+
+        var keys = new WrapPanel { Margin = new Thickness(0, 10, 0, 0) };
+        void Quick(string text, Action act) { var b = Action(text, () => { act(); _s.Save(); Changed(); }); b.Margin = new Thickness(0, 0, 6, 6); keys.Children.Add(b); }
+        var random = new Random();
+        Quick("Zufall", () =>
+        {
+            _s.PetShape = random.Next(PixelPet.Shapes.Length); _s.PetEars = random.Next(PixelPet.EarKinds.Length); _s.PetEyes = random.Next(PixelPet.EyeKinds.Length);
+            _s.PetMouth = random.Next(1, PixelPet.Mouths.Length); _s.PetPattern = random.Next(PixelPet.Patterns.Length); _s.PetHat = random.Next(PixelPet.Hats.Length);
+            _s.PetAccessory = random.Next(PixelPet.Accessories.Length);
+            _s.PetColor = PixelPet.Palette[random.Next(PixelPet.Palette.Length)];
+            do _s.PetColor2 = PixelPet.Palette[random.Next(PixelPet.Palette.Length)]; while (_s.PetColor2 == _s.PetColor);
+            _s.Save();
+            Reload();
+        });
+        Quick("Antippen", preview.Poke);
+        Quick("Standard", () => { PixelPet.Presets[1].Apply(_s); _s.Save(); Reload(); });
+        side.Children.Add(keys);
+
+        Page.Children.Add(tag);
+        Page.Children.Add(top);
+
+        // ---- parts as picture tiles: each shows your character with that option ----
+        void Parts(string title, string[] names, Func<int> get, Action<Settings, int> set)
+        {
+            var section = Section(title);
+            var wrap = new WrapPanel { Margin = new Thickness(0, 8, 0, 8) };
+            for (int i = 0; i < names.Length; i++)
+            {
+                int index = i;
+                Border tile = null;
+                void Draw()
+                {
+                    var look = PixelPet.Copy(_s);
+                    set(look, index);
+                    var fresh = PictureTile(look, names[index], get() == index);
+                    var child = fresh.Child;
+                    fresh.Child = null;
+                    tile.Child = child;
+                    tile.Background = fresh.Background;
+                    tile.BorderBrush = fresh.BorderBrush;
+                }
+                tile = PictureTile(PixelPet.Copy(_s), names[i], false);
+                tile.MouseLeftButtonUp += (_, _) => { set(_s, index); _s.Save(); Changed(); };
+                tiles.Add(Draw);
+                Draw();
+                wrap.Children.Add(tile);
+            }
+            section.Children.Add(wrap);
+        }
+        Parts("Körper", PixelPet.Shapes, () => _s.PetShape, (s, i) => s.PetShape = i);
+        Parts("Ohren", PixelPet.EarKinds, () => _s.PetEars, (s, i) => s.PetEars = i);
+        Parts("Augen", PixelPet.EyeKinds, () => _s.PetEyes, (s, i) => s.PetEyes = i);
+        Parts("Mund", PixelPet.Mouths, () => _s.PetMouth, (s, i) => s.PetMouth = i);
+        Parts("Muster", PixelPet.Patterns, () => _s.PetPattern, (s, i) => s.PetPattern = i);
+        Parts("Hut", PixelPet.Hats, () => _s.PetHat, (s, i) => s.PetHat = i);
+        Parts("Accessoire", PixelPet.Accessories, () => _s.PetAccessory, (s, i) => s.PetAccessory = i);
+        Parts("Schattierung", PixelPet.Shadings, () => _s.PetShading, (s, i) => s.PetShading = i);
+
+        // ---- colors ----
+        var colors = Section("Farben");
+        Swatches(colors, "Körper", _s.PetColor, c => { _s.PetColor = c; Changed(); });
+        Swatches(colors, "Zweitfarbe", _s.PetColor2, c => { _s.PetColor2 = c; Changed(); });
+        Swatches(colors, "Augen", _s.PetEyeColor, c => { _s.PetEyeColor = c; Changed(); });
+        Switch(colors, "Umriss", _s.PetOutline, v => { _s.PetOutline = v; Changed(); }, "Dunkle Kante wie in klassischer Pixel-Art.");
+        Switch(colors, "Bäckchen", _s.PetCheeks, v => { _s.PetCheeks = v; Changed(); });
+
+        // ---- effects ----
+        var fx = Section("Effekte");
+        var fxRow = Line("Aktiv", "Mehrere wählbar. Neu eingeschaltete zeigt die Vorschau sofort.");
+        fxRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
+        fxRow.ColumnDefinitions.Add(new ColumnDefinition());
+        var fxWrap = new WrapPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 4, 0, 4) };
+        foreach (var (effect, bit) in PixelPet.Effects)
+        {
+            var chip = Chip(effect, (_s.PetFx & (1 << bit)) != 0);
+            chip.MouseLeftButtonUp += (_, _) =>
+            {
+                _s.PetFx ^= 1 << bit;
+                SetChip(chip, (_s.PetFx & (1 << bit)) != 0);
+                _s.Save();
+                if ((_s.PetFx & (1 << bit)) != 0) preview.Poke();
+                Changed();
+            };
+            fxWrap.Children.Add(chip);
+        }
+        Grid.SetColumn(fxWrap, 1);
+        fxRow.Children.Add(fxWrap);
+        fx.Children.Add(fxRow);
+
+        // ---- behaviour ----
+        var act = Section("Verhalten");
+        Chips(act, "Tagesablauf", PixelPet.Behaviors, _s.PetBehavior, i => { _s.PetBehavior = i; Changed(); });
+        Switch(act, "Tanzt zur Musik", _s.PetDance, v => { _s.PetDance = v; Changed(); }, "Hüpft im Takt, Noten und Aura gehen mit.");
+        Switch(act, "In der kleinen Island", _s.PetInNotch, v => { _s.PetInNotch = v; App.Island?.PetChanged(); }, "Ohne Musik läuft es in der eingeklappten Island herum.");
+        Slider(act, "Größe", 0.5, 1, () => Math.Min(1, _s.PetSize), v => { _s.PetSize = Math.Round(v, 2); Changed(); }, v => $"{v * 100:0} %");
+        Slider(act, "Tempo", 0.3, 2.5, () => _s.PetSpeed, v => { _s.PetSpeed = Math.Round(v, 2); Changed(); }, v => $"{v * 100:0} %");
+        Changed();
+    }
+
+    /// <summary>A tile with a small picture of a character look and its name; the chosen one is framed white.</summary>
+    private static Border PictureTile(Settings look, string label, bool chosen, bool small = false)
+    {
+        var image = new Image { Source = PixelPet.Sprite(look), Width = small ? 32 : 48, Height = small ? 40 : 60, Stretch = Stretch.Uniform };
+        RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
+        var stack = new StackPanel();
+        stack.Children.Add(image);
+        stack.Children.Add(new TextBlock
+        {
+            Text = label.ToUpperInvariant(), FontFamily = Theme.Mono, FontSize = small ? 8 : 9, HorizontalAlignment = HorizontalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = small ? 48 : 70, Margin = new Thickness(0, 3, 0, 0),
+            Foreground = chosen ? Brushes.White : (Brush)Application.Current.Resources["Dim"],
+        });
+        var tile = new Border
+        {
+            Width = small ? 52 : 78, Padding = new Thickness(2, 5, 2, 4), Margin = new Thickness(0, 0, 6, 6), CornerRadius = new CornerRadius(2), Cursor = Cursors.Hand,
+            BorderThickness = new Thickness(1), BorderBrush = chosen ? Brushes.White : Theme.Res("Line"),
+            Background = chosen ? new SolidColorBrush(Color.FromArgb(0x1A, 255, 255, 255)) : new SolidColorBrush(Color.FromArgb(0x06, 255, 255, 255)),
+            Child = stack, ToolTip = label,
+        };
+        Feedback.SetPress(tile, true);
+        return tile;
+    }
+
+    private static Border Chip(string text, bool on)
+    {
+        var chip = new Border
+        {
+            CornerRadius = new CornerRadius(2), Padding = new Thickness(8, 4, 8, 4), Margin = new Thickness(0, 2, 4, 2), Cursor = Cursors.Hand,
+            BorderBrush = Theme.Res("Line"), BorderThickness = new Thickness(1),
+            Child = new TextBlock { Text = text.ToUpperInvariant(), FontFamily = Theme.Mono, FontSize = 10 },
+        };
+        Feedback.SetPress(chip, true);
+        SetChip(chip, on);
+        return chip;
+    }
+
+    private static void SetChip(Border chip, bool on)
+    {
+        chip.Background = on ? Selected : Brushes.Transparent;
+        ((TextBlock)chip.Child).Foreground = on ? Ink : Brushes.White;
+    }
+
+    /// <summary>Like Pick, but the options wrap onto more lines, for long lists.</summary>
+    private void Chips(StackPanel into, string label, string[] options, int selected, Action<int> apply)
+    {
+        var row = Line(label);
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
+        row.ColumnDefinitions.Add(new ColumnDefinition());
+        var wrap = new WrapPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 4, 0, 4) };
+        for (int i = 0; i < options.Length; i++)
+        {
+            int index = i;
+            var chip = Chip(options[i], i == selected);
+            chip.MouseLeftButtonUp += (_, _) =>
+            {
+                foreach (Border c in wrap.Children) SetChip(c, c == chip);
+                apply(index);
+                _s.Save();
+            };
+            wrap.Children.Add(chip);
+        }
+        Grid.SetColumn(wrap, 1);
+        row.Children.Add(wrap);
+        into.Children.Add(row);
+    }
+
+    /// <summary>A row of color fields; the chosen one has a white frame.</summary>
+    private void Swatches(StackPanel into, string label, string current, Action<string> apply)
+    {
+        var row = Line(label);
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
+        row.ColumnDefinitions.Add(new ColumnDefinition());
+        var wrap = new WrapPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 4, 0, 4) };
+        foreach (var hex in PixelPet.Palette)
+        {
+            var swatch = new Border
+            {
+                Width = 22, Height = 22, Margin = new Thickness(0, 2, 5, 2), CornerRadius = new CornerRadius(2), Cursor = Cursors.Hand, ToolTip = hex,
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)), BorderThickness = new Thickness(2),
+                BorderBrush = hex == current ? Brushes.White : Theme.Res("Line"),
+            };
+            Feedback.SetPress(swatch, true);
+            swatch.MouseLeftButtonUp += (_, _) =>
+            {
+                foreach (Border o in wrap.Children) o.BorderBrush = Theme.Res("Line");
+                swatch.BorderBrush = Brushes.White;
+                apply(hex);
+                _s.Save();
+            };
+            wrap.Children.Add(swatch);
+        }
+        Grid.SetColumn(wrap, 1);
+        row.Children.Add(wrap);
+        into.Children.Add(row);
     }
     private void Effects()
     {

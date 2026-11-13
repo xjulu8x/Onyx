@@ -53,6 +53,8 @@ internal static class Native
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)] public static extern int SHQueryRecycleBin(string root, ref SHQUERYRBINFO info);
 
     /// <summary>Hides the window from Alt+Tab and keeps it from stealing focus. Desktop-level windows stay pinned below everything.</summary>
+    [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT p);
+
     public static void MakeOverlay(Window w, bool desktopLevel)
     {
         w.SourceInitialized += (_, _) =>

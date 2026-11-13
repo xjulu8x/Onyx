@@ -119,7 +119,7 @@ public partial class IslandWindow : Window
         Animate(EditTab, OpacityProperty, expand ? 1 : 0, TimeSpan.FromMilliseconds((expand ? 160 : 70) * k), FadeEase, expand ? 140 * k : 0);
         EditTab.IsHitTestVisible = expand;
         // Cover and title belong to the notch and the start page; the activity page is fresh on every open and freed on close.
-        _surface.ShowMedia(!expand || _page == 0);
+        _surface.ShowMedia((!expand || _page == 0) && !NotchPetOn);
         NotifyPage.Content = expand && _page == 2 ? BuildActivity() : null;
         ShowEqualizer();
         // The open page (player or settings) is kept, so hovering again continues where the user left off.
@@ -216,7 +216,7 @@ public partial class IslandWindow : Window
         ControlPage.Visibility = index == 1 ? Visibility.Visible : Visibility.Collapsed;
         NotifyPage.Visibility = index == 2 ? Visibility.Visible : Visibility.Collapsed;
         // Cover and title live on the start page only.
-        _surface.ShowMedia(index == 0 || !_expanded);
+        _surface.ShowMedia((index == 0 || !_expanded) && !NotchPetOn);
         if (index == 1) FillTray();
         // Built when opened and dropped on leaving, so notifications and the app list cost nothing in between.
         NotifyPage.Content = index == 2 ? BuildActivity() : null;
@@ -406,7 +406,7 @@ public partial class IslandWindow : Window
         // Expanded: the music card (tabs 12+34, gap 8, card padding 14), compact: left in the notch.
         float artSize = _expanded ? 120 : Capsule ? 28 : 22;
         float artX = _expanded ? 30 : 12, artY = _expanded ? 68 : (float)((CompactH - artSize) / 2);
-        float textX = artX + artSize + (_expanded ? 14 : 9), textY = _expanded ? 86 : (float)((CompactH - 18) / 2);
+        float textX = NotchPetOn ? (float)(CompactW - 54) : artX + artSize + (_expanded ? 14 : 9), textY = _expanded ? 86 : (float)((CompactH - 18) / 2);
         _surface.SetTextScale(k / (float)TextScale);
         _surface.MoveMedia(new System.Numerics.Vector2(artX * k, (artY + corner) * k), artSize * k, new System.Numerics.Vector2(textX * k, (textY + corner) * k), _expanded, animate);
     }
@@ -416,7 +416,7 @@ public partial class IslandWindow : Window
         var s = Settings.Current;
         double k = VisualTreeHelper.GetDpi(this).DpiScaleX * s.IslandScale;
         double corner = s.IslandShape == 1 ? CompactRadius * s.IslandCorners : 0;
-        _surface.SetEqualizer(_media.IsPlaying, !_expanded, (float)k, (float)((CompactW - 36) * k), (float)((corner + (CompactH - 14) / 2) * k));
+        _surface.SetEqualizer(_media.IsPlaying, !_expanded && _media.HasSession, (float)k, (float)((CompactW - 36) * k), (float)((corner + (CompactH - 14) / 2) * k));
     }
 
     private void ApplyColor()
@@ -499,7 +499,7 @@ public partial class IslandWindow : Window
     // ---------- data ----------
 
     /// <summary>Without music the notch shows the time and, when known, the CPU temperature.</summary>
-    private string IdleText() => DateTime.Now.ToString("HH:mm") + (_sys.CpuTemp is { } t ? $"   {t:0}°" : "");
+    private string IdleText() => DateTime.Now.ToString("HH:mm");
 
     private void UpdateMedia()
     {
@@ -519,6 +519,7 @@ public partial class IslandWindow : Window
         SendMedia();
         ShowEqualizer();
         UpdateProgress();
+        UpdateNotchPet();
     }
 
     // ---------- music glow ----------

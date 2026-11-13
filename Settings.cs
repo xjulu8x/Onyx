@@ -74,10 +74,27 @@ public class Settings
     public List<string> HiddenPins { get; set; } = new(); // Windows pins taken off the dock
 
     // Start page of the island (2.5)
-    public int PetKind { get; set; }
-    public string PetColor { get; set; } = "#E6E6E6";
-    public int PetHat { get; set; }
+    // Pixel character (2.5.1): built from parts, see PixelPet
     public string PetName { get; set; } = "Pixel";
+    public int PetShape { get; set; }      // PixelPet.Shapes
+    public int PetEars { get; set; } = 1;  // PixelPet.Ears
+    public int PetEyes { get; set; } = 1;
+    public int PetMouth { get; set; } = 2;
+    public int PetPattern { get; set; } = 1;
+    public int PetHat { get; set; }
+    public string PetColor { get; set; } = "#E6E6E6";
+    public string PetColor2 { get; set; } = "#FFB340";
+    public string PetEyeColor { get; set; } = "#14141A";
+    public bool PetOutline { get; set; } = true;
+    public bool PetCheeks { get; set; } = true;
+    public bool PetDance { get; set; } = true;
+    public int PetFx { get; set; } = 0x1BF; // bit mask of PixelPet.Effects
+    public int PetBehavior { get; set; }   // 0 wanders, 1 stays, 2 sleeps
+    public double PetSize { get; set; } = 1;
+    public double PetSpeed { get; set; } = 1;
+    public bool PetInNotch { get; set; } = true; // shown in the small island while no music plays
+    public int PetAccessory { get; set; } // PixelPet.Accessories
+    public int PetShading { get; set; } = 2; // 0 flat, 1 soft, 2 strong
     public double? VibranceLevel { get; set; } // saturation chosen in Onyx; null = leave the driver alone
     public bool CrosshairOn { get; set; }
     public int CrosshairStyle { get; set; } = 1;
