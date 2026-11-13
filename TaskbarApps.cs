@@ -309,7 +309,7 @@ public static class TaskbarApps
         return Tints[(icon, color)] = result;
     }
 
-    private static uint ProcessOf(IntPtr h)
+    internal static uint ProcessOf(IntPtr h)
     {
         Win32.GetWindowThreadProcessId(h, out var pid);
         if (pid == OwnPid) return 0;

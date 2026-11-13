@@ -101,7 +101,7 @@ public sealed class PixelPet : FrameworkElement
 
     public bool Running { set { _wantRun = value; Apply(); } }
 
-    private double Fps => Compact ? 12 : 24; // smooth motion; resting frames are skipped below
+    private double Fps => Compact ? 12 : 20; // smooth motion; resting frames are skipped below
 
     private void Apply()
     {

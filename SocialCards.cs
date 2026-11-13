@@ -60,8 +60,8 @@ internal static class FriendRow
 }
 
 /// <summary>
-/// Steam friends who are online and what they play, from the Steam Web API. Needs your own API key and Steam ID
-/// (Einstellungen → Widgets → Freunde) and a friends list that is visible. Asked once a minute while the card can be seen.
+/// Steam friends who are online and what they play. No key needed: the account comes from the Steam app on this PC,
+/// the friends from the public friends page. Asked every 90 seconds while the card can be seen.
 /// </summary>
 public sealed class SteamCard : Card
 {
@@ -69,68 +69,79 @@ public sealed class SteamCard : Card
     private readonly StackPanel _list = new();
     private readonly TextBlock _count = Theme.Tag("");
     private DateTime _fetched;
-    private string _resolvedId;
 
     public SteamCard() : base("Steam", "+ Steam / Freunde", 300, 300)
     {
         Meta.Children.Add(_count);
         SetBody(new ScrollViewer { Content = _list, VerticalScrollBarVisibility = ScrollBarVisibility.Hidden, Focusable = false });
-        Every(TimeSpan.FromSeconds(60), Fetch);
+        Every(TimeSpan.FromSeconds(90), Fetch);
         Loaded += (_, _) => Fetch();
     }
 
     protected override void OnResume() { if ((DateTime.Now - _fetched).TotalSeconds > 55) Fetch(); }
 
-    public void Refresh() { _resolvedId = null; Fetch(); }
+    public void Refresh() => Fetch();
 
     private async void Fetch()
     {
-        var s = Settings.Current;
-        if (string.IsNullOrWhiteSpace(s.SteamKey) || string.IsNullOrWhiteSpace(s.SteamId))
+        // No key needed: the account comes from the Steam app on this PC (or a profile link from the settings),
+        // the friends from your public friends page on steamcommunity.com.
+        string profile = ProfileUrl();
+        if (profile == null)
         {
-            _list.Children.Clear();
-            _count.Text = "";
-            _list.Children.Add(FriendRow.Note("STEAM VERBINDEN:\nEINSTELLUNGEN > WIDGETS > FREUNDE.\nAPI-KEY UND STEAM-ID EINTRAGEN."));
+            Show("STEAM NICHT GEFUNDEN.\nSTEAM STARTEN UND ANMELDEN\nODER PROFIL-LINK IN DEN EINSTELLUNGEN.");
             return;
         }
         _fetched = DateTime.Now;
         try
         {
-            string key = Uri.EscapeDataString(s.SteamKey.Trim());
-            _resolvedId ??= await Resolve(key, s.SteamId.Trim());
-            if (_resolvedId == null) { Show("STEAM-ID NICHT GEFUNDEN"); return; }
-            using var friends = JsonDocument.Parse(await Http.GetStringAsync($"https://api.steampowered.com/ISteamUser/GetFriendList/v1/?key={key}&steamid={_resolvedId}&relationship=friend"));
-            var ids = friends.RootElement.GetProperty("friendslist").GetProperty("friends").EnumerateArray().Select(f => f.GetProperty("steamid").GetString()).ToList();
-            var people = new List<(int Order, Color State, string Avatar, string Name, string Detail)>();
-            for (int i = 0; i < ids.Count; i += 100)
+            using var request = new HttpRequestMessage(HttpMethod.Get, profile + "/friends/");
+            request.Headers.UserAgent.ParseAdd("Mozilla/5.0");
+            request.Headers.AcceptLanguage.ParseAdd("en");
+            using var response = await Http.SendAsync(request);
+            string html = await response.Content.ReadAsStringAsync();
+            if (!html.Contains("friend_block_v2"))
             {
-                using var doc = JsonDocument.Parse(await Http.GetStringAsync($"https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key={key}&steamids={string.Join(",", ids.Skip(i).Take(100))}"));
-                foreach (var p in doc.RootElement.GetProperty("response").GetProperty("players").EnumerateArray())
-                {
-                    int state = p.TryGetProperty("personastate", out var ps) ? ps.GetInt32() : 0;
-                    string game = p.TryGetProperty("gameextrainfo", out var g) ? g.GetString() : null;
-                    if (state == 0 && game == null) continue; // offline
-                    var color = game != null ? FriendRow.Playing : state switch { 2 => FriendRow.Busy, 3 or 4 => FriendRow.Away, _ => FriendRow.Online };
-                    string detail = game != null ? "spielt " + game : state switch { 2 => "beschäftigt", 3 => "abwesend", 4 => "schläft", _ => "online" };
-                    people.Add((game != null ? 0 : state == 1 ? 1 : 2, color, p.GetProperty("avatar").GetString(), p.GetProperty("personaname").GetString(), detail));
-                }
+                Show(html.Contains("private") || html.Contains("profile_private")
+                    ? "FREUNDESLISTE IST PRIVAT.\nIN STEAM: PROFIL > PRIVATSPHÄRE >\nFREUNDESLISTE: ÖFFENTLICH."
+                    : "KEINE FREUNDE GEFUNDEN.");
+                return;
+            }
+            var people = new List<(int Order, Color State, string Avatar, string Name, string Detail)>();
+            int total = 0;
+            foreach (var block in html.Split("class=\"selectable friend_block_v2 persona ").Skip(1))
+            {
+                total++;
+                string state = block[..Math.Max(0, block.IndexOf('"'))].Trim();
+                if (state.StartsWith("offline")) continue;
+                string name = System.Net.WebUtility.HtmlDecode(Between(block, "friend_block_content\">", "<br") ?? "?").Trim();
+                string avatar = Between(block, "<img src=\"", "\"");
+                string game = Between(block, "friend_game_link\">", "<");
+                bool playing = state.StartsWith("in-game") && game != null;
+                var color = playing ? FriendRow.Playing : state.Contains("away") || state.Contains("snooze") ? FriendRow.Away : FriendRow.Online;
+                people.Add((playing ? 0 : 1, color, avatar, name, playing ? "spielt " + System.Net.WebUtility.HtmlDecode(game).Trim() : "online"));
             }
             _list.Children.Clear();
-            _count.Text = $"{people.Count}/{ids.Count} ONLINE";
+            _count.Text = $"{people.Count}/{total} ONLINE";
             foreach (var p in people.OrderBy(p => p.Order).ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).Take(9))
                 _list.Children.Add(FriendRow.Make(p.State, p.Avatar, p.Name, p.Detail));
             if (people.Count == 0) _list.Children.Add(FriendRow.Note("GERADE IST NIEMAND ONLINE."));
             if (people.Count > 9) _list.Children.Add(FriendRow.Note($"+ {people.Count - 9} WEITERE"));
-        }
-        catch (HttpRequestException e) when (e.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
-        {
-            Show("KEY ABGELEHNT ODER FREUNDESLISTE PRIVAT");
         }
         catch
         {
             Show("KEINE VERBINDUNG ZU STEAM");
             _fetched = DateTime.Now.AddSeconds(-40);
         }
+    }
+
+    private static string Between(string text, string start, string end)
+    {
+        int a = text.IndexOf(start, StringComparison.Ordinal);
+        if (a < 0) return null;
+        a += start.Length;
+        int b = text.IndexOf(end, a, StringComparison.Ordinal);
+        return b < 0 ? null : text[a..b];
     }
 
     private void Show(string note)
@@ -140,15 +151,46 @@ public sealed class SteamCard : Card
         _list.Children.Add(FriendRow.Note(note));
     }
 
-    /// <summary>Accepts the 17-digit SteamID64 or the name from a custom profile link.</summary>
-    private static async Task<string> Resolve(string key, string id)
+    /// <summary>
+    /// Your profile: a link from the settings if given, otherwise the account signed in to Steam on this PC
+    /// (the running Steam app, or the last login it remembers).
+    /// </summary>
+    public static string ProfileUrl()
     {
-        id = id.TrimEnd('/');
-        if (id.Contains('/')) id = id[(id.LastIndexOf('/') + 1)..];
-        if (id.Length == 17 && id.All(char.IsDigit)) return id;
-        using var doc = JsonDocument.Parse(await Http.GetStringAsync($"https://api.steampowered.com/ISteamUser/ResolveVanityURL/v1/?key={key}&vanityurl={Uri.EscapeDataString(id)}"));
-        var r = doc.RootElement.GetProperty("response");
-        return r.GetProperty("success").GetInt32() == 1 ? r.GetProperty("steamid").GetString() : null;
+        var own = Settings.Current.SteamId?.Trim().TrimEnd('/');
+        if (!string.IsNullOrEmpty(own))
+        {
+            if (own.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return own.Replace("/friends", "");
+            return own.Length == 17 && own.All(char.IsDigit) ? "https://steamcommunity.com/profiles/" + own : "https://steamcommunity.com/id/" + own;
+        }
+        return LocalAccount() is { } id ? "https://steamcommunity.com/profiles/" + id : null;
+    }
+
+    public static string LocalAccount()
+    {
+        try
+        {
+            using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam\ActiveProcess"))
+                if (key?.GetValue("ActiveUser") is int account && account != 0) return (76561197960265728L + (uint)account).ToString();
+            using var steam = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam");
+            if (steam?.GetValue("SteamPath") is string path)
+            {
+                var file = System.IO.Path.Combine(path.Replace('/', '\\'), "config", "loginusers.vdf");
+                if (System.IO.File.Exists(file))
+                {
+                    // The user marked "MostRecent" "1", or simply the first one.
+                    string text = System.IO.File.ReadAllText(file), best = null;
+                    foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(text, "\"(7656\\d{13})\"\\s*\\{([^}]*)\\}"))
+                    {
+                        best ??= m.Groups[1].Value;
+                        if (m.Groups[2].Value.Contains("\"MostRecent\"\t\t\"1\"") || System.Text.RegularExpressions.Regex.IsMatch(m.Groups[2].Value, "\"MostRecent\"\\s*\"1\"")) return m.Groups[1].Value;
+                    }
+                    return best;
+                }
+            }
+        }
+        catch { }
+        return null;
     }
 
     protected override Point DefaultPlace(Rect w) => new(w.Left + 16, w.Top + 636);
@@ -182,6 +224,22 @@ public sealed class DiscordCard : Card
     }
 
     public void Refresh() { _stop?.Cancel(); Connect(); }
+
+    /// <summary>The bot's application id: the first part of a bot token is its user id in base64. Null when it is no token.</summary>
+    public static string AppId(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token)) return null;
+        var first = token.Trim().Split('.');
+        if (first.Length != 3) return null;
+        try
+        {
+            string b64 = first[0].Replace('-', '+').Replace('_', '/');
+            b64 = b64.PadRight(b64.Length + (4 - b64.Length % 4) % 4, '=');
+            string id = Encoding.ASCII.GetString(Convert.FromBase64String(b64));
+            return id.Length >= 16 && id.All(char.IsDigit) ? id : null;
+        }
+        catch { return null; }
+    }
 
     private async void Connect()
     {

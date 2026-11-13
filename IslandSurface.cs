@@ -57,6 +57,10 @@ internal sealed class IslandSurface
     private readonly ContainerVisual _pill;
     private readonly SpriteVisual _tint, _glow;
     private readonly SpriteVisual _dots;
+    private readonly ContainerVisual _root;
+    private ShapeVisual _laser;
+    private readonly List<CompositionSpriteShape> _beams = new();
+    private bool _laserOn;
     private readonly SpriteVisual _art, _smallText, _bigText;
     private Vortice.Direct3D11.ID3D11Device _device; // kept alive with the images
     private Vortice.Direct3D11.ID3D11DeviceContext _context;
@@ -64,6 +68,8 @@ internal sealed class IslandSurface
 
     /// <summary>False when images can't reach the GPU here; the WPF layer then shows cover and title itself.</summary>
     public bool MediaReady { get; }
+    /// <summary>True after the graphics device had to be made anew; the island then sends its images again.</summary>
+    public int DeviceGeneration { get; private set; }
     private readonly ContainerVisual _equalizer;
     private readonly SpriteVisual[] _bars = new SpriteVisual[4];
     private bool _barsMoving, _barsStarted, _barsVisible = true;
@@ -93,7 +99,10 @@ internal sealed class IslandSurface
         _target = DesktopWindowTarget.FromAbi(raw);
 
         _pill = _compositor.CreateContainerVisual();
-        _target.Root = _pill;
+        // Root: the clipped body, and above it the laser lights, which may shine past the edge.
+        _root = _compositor.CreateContainerVisual();
+        _target.Root = _root;
+        _root.Children.InsertAtTop(_pill);
         if (_blur)
         {
             var backdrop = _compositor.CreateSpriteVisual();
@@ -183,9 +192,26 @@ internal sealed class IslandSurface
     public void SetMedia(System.Windows.Media.Imaging.BitmapSource art, System.Windows.Media.Imaging.BitmapSource small, System.Windows.Media.Imaging.BitmapSource big)
     {
         if (!MediaReady) return;
-        if (art != null) _art.Brush = Upload(art);
-        if (small != null) { _smallText.Brush = Upload(small); _smallText.Size = new Vector2(small.PixelWidth, small.PixelHeight) * _textScale; }
-        if (big != null) { _bigText.Brush = Upload(big); _bigText.Size = new Vector2(big.PixelWidth, big.PixelHeight) * _textScale; }
+        try
+        {
+            if (art != null) _art.Brush = Upload(art);
+            if (small != null) { _smallText.Brush = Upload(small); _smallText.Size = new Vector2(small.PixelWidth, small.PixelHeight) * _textScale; }
+            if (big != null) { _bigText.Brush = Upload(big); _bigText.Size = new Vector2(big.PixelWidth, big.PixelHeight) * _textScale; }
+        }
+        catch (Exception e)
+        {
+            // The graphics device is gone (standby, driver update, GPU reset): make a new one and try once more.
+            App.Log(e);
+            _device?.Dispose(); _context?.Dispose();
+            if (!StartGraphics()) return;
+            try
+            {
+                if (art != null) _art.Brush = Upload(art);
+                if (small != null) _smallText.Brush = Upload(small);
+                if (big != null) _bigText.Brush = Upload(big);
+            }
+            catch (Exception again) { App.Log(again); }
+        }
     }
 
     private float _textScale = 0.5f;
@@ -293,6 +319,72 @@ internal sealed class IslandSurface
 
     public void SetGlow(float opacity) => _glow.Opacity = opacity;
 
+    // ---------- music lights: laser beams running around the edge ----------
+
+    /// <summary>
+    /// Builds the light beams once: dashed strokes along the outline of the island that run around it on the GPU.
+    /// Each beam is three strokes (wide and faint, middle, thin and bright), which reads as a glowing laser line.
+    /// A second, thinner set runs the other way. Only speed and brightness are changed with the music.
+    /// </summary>
+    private void BuildLaser()
+    {
+        _laser = _compositor.CreateShapeVisual();
+        var follow = _compositor.CreateExpressionAnimation("pill.Size");
+        follow.SetReferenceParameter("pill", _pill);
+        _laser.StartAnimation("Size", follow);
+        var move = _compositor.CreateExpressionAnimation("pill.Offset");
+        move.SetReferenceParameter("pill", _pill);
+        _laser.StartAnimation("Offset", move);
+        _laser.Opacity = 0;
+        _root.Children.InsertAtTop(_laser);
+        foreach (var (thickness, segment, gap, period, reverse) in new[] { (8f, 90f, 210f, 3.2, false), (4f, 90f, 210f, 3.2, false), (1.6f, 90f, 210f, 3.2, false), (1.2f, 40f, 160f, 2.3, true), (3.5f, 40f, 160f, 2.3, true) })
+        {
+            var beam = _compositor.CreateSpriteShape(_shape);
+            beam.StrokeThickness = thickness;
+            beam.StrokeDashArray.Add(segment / thickness);
+            beam.StrokeDashArray.Add(gap / thickness);
+            beam.StrokeDashCap = CompositionStrokeCap.Round;
+            beam.StrokeStartCap = beam.StrokeEndCap = CompositionStrokeCap.Round;
+            var run = _compositor.CreateScalarKeyFrameAnimation();
+            float length = (segment + gap) / thickness;
+            run.InsertKeyFrame(0, 0);
+            run.InsertKeyFrame(1, reverse ? length : -length, _compositor.CreateLinearEasingFunction());
+            run.Duration = TimeSpan.FromSeconds(period);
+            run.IterationBehavior = AnimationIterationBehavior.Forever;
+            beam.StartAnimation("StrokeDashOffset", run);
+            _laser.Shapes.Add(beam);
+            _beams.Add(beam);
+        }
+    }
+
+    /// <summary>Switches the lights on or off and gives them their color (accent or cover).</summary>
+    public void SetLaser(bool on, System.Windows.Media.Color color)
+    {
+        if (on && _laser == null) BuildLaser();
+        _laserOn = on;
+        if (_laser == null) return;
+        Color Tint(byte alpha, double white) => Color.FromArgb(alpha, (byte)(color.R + (255 - color.R) * white), (byte)(color.G + (255 - color.G) * white), (byte)(color.B + (255 - color.B) * white));
+        var looks = new[] { Tint(0x2A, 0), Tint(0x70, 0.15), Tint(0xFF, 0.55), Tint(0xE0, 0.7), Tint(0x40, 0.2) };
+        for (int i = 0; i < _beams.Count; i++) _beams[i].StrokeBrush = _compositor.CreateColorBrush(looks[i]);
+        if (!on) { _laser.Opacity = 0; Rate(0); }
+        ClipToPill(0);
+    }
+
+    /// <summary>Music level 0..1: brighter and faster with the song, a flash on loud beats. Called about 20 times a second.</summary>
+    public void SetLaserLevel(float level, bool beat)
+    {
+        if (!_laserOn || _laser == null) return;
+        if (level <= 0.001f) { _laser.Opacity = 0; Rate(0); return; } // silence: the lights rest
+        _laser.Opacity = Math.Clamp(0.25f + level * 0.9f + (beat ? 0.3f : 0), 0, 1);
+        Rate(0.5f + level * 2.6f + (beat ? 1.5f : 0));
+    }
+
+    private void Rate(float rate)
+    {
+        foreach (var beam in _beams)
+            if (beam.TryGetAnimationController("StrokeDashOffset") is { } controller) controller.PlaybackRate = rate;
+    }
+
     /// <summary>Cover and title only belong to the start page of the panel and to the notch.</summary>
     public void ShowMedia(bool visible)
     {
@@ -383,6 +475,7 @@ internal sealed class IslandSurface
     /// </summary>
     private void ClipToPill(float margin)
     {
+        if (_laserOn) margin = Math.Max(margin, 10); // room for the glow of the lights around the edge
         int w = (int)(_size.X + 2 * margin), h = (int)(_size.Y + _top + margin);
         int left = (_width - w) / 2;
         SetWindowRgn(_window.Handle, CreateRectRgn(left, 0, left + w, h), false);

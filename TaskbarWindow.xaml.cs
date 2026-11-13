@@ -265,7 +265,7 @@ public partial class TaskbarWindow : Window
     {
         var fg = Win32.GetForegroundWindow();
         if (IsOwnWindow(fg)) { if (_peeking) _peekLeftGame = true; return; }
-        bool full = IsFullscreen(fg);
+        bool full = IsFullscreen(fg) && Games.IsGame(fg); // only games: a video or app in full screen keeps island and dock
 
         if (_peeking)
         {
@@ -424,7 +424,7 @@ public partial class TaskbarWindow : Window
     /// <summary>Foreground / minimize changes arrive as events, so the active app is highlighted immediately instead of on the next poll.</summary>
     private void HookWindowEvents()
     {
-        _winEventProc = (_, _, _, _, _, _, _) => Dispatcher.BeginInvoke(RefreshApps);
+        _winEventProc = (_, _, hwnd, _, _, _, _) => Dispatcher.BeginInvoke(() => { RefreshApps(); LiftSearch(hwnd); });
         SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, IntPtr.Zero, _winEventProc, 0, 0, 0);
         SetWinEventHook(EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND, IntPtr.Zero, _winEventProc, 0, 0, 0);
     }
@@ -437,6 +437,25 @@ public partial class TaskbarWindow : Window
         CheckProfile();
         if (_tick++ % 6 == 0) UpdateNetworkIcon();
         RefreshApps();
+    }
+
+    /// <summary>
+    /// The Windows search panel places itself on the hidden Windows taskbar, so it would cover the dock. When it opens,
+    /// it is moved up until its bottom sits a little above the dock. It settles in an animation, so this is done a few times.
+    /// </summary>
+    private async void LiftSearch(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return;
+        var path = TaskbarApps.PathOf(TaskbarApps.ProcessOf(hwnd));
+        if (path == null || !path.EndsWith("SearchHost.exe", StringComparison.OrdinalIgnoreCase)) return;
+        double dpi = VisualTreeHelper.GetDpi(this).DpiScaleY;
+        int limit = (int)((SystemParameters.WorkArea.Bottom - 10) * dpi);
+        for (int i = 0; i < 6; i++)
+        {
+            if (Native.GetWindowRect(hwnd, out var r) && r.Bottom > limit)
+                Native.SetWindowPos(hwnd, IntPtr.Zero, r.Left, r.Top - (r.Bottom - limit), 0, 0, Native.SWP_NOSIZE | Native.SWP_NOZORDER | Native.SWP_NOACTIVATE);
+            await Task.Delay(80);
+        }
     }
 
     private void RefreshApps()

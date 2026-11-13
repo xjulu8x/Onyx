@@ -13,7 +13,7 @@ public partial class IslandWindow
     private Border _crossTile;
     private VolumeSlider _vibSlider;
     private readonly DispatcherTimer _vibSave = new() { Interval = TimeSpan.FromMilliseconds(600) };
-    private const int GamePage = 7; // "Spiel" in the settings window
+    private const int GamePage = 6; // "Spiel" in the settings window
 
     private void BuildActions()
     {
@@ -121,8 +121,26 @@ public partial class IslandWindow
     /// <summary>The character only moves while it can be seen: island open on the start page.</summary>
     private void ShowPet()
     {
-        Pet.Running = _expanded && _page == 0;
+        // While the panel opens or closes it is one cached picture; the character starts once that is over,
+        // so its frames never force the whole panel to be drawn again during the motion.
+        Pet.Running = _expanded && _page == 0 && Expanded.CacheMode == null;
         UpdateNotchPet();
+    }
+
+    private DispatcherTimer _contentSettle;
+
+    /// <summary>Caches the panel as one picture for the open/close motion only, then lets it draw normally again.</summary>
+    private void CacheDuringMotion()
+    {
+        Expanded.CacheMode ??= new BitmapCache { EnableClearType = false, SnapsToDevicePixels = true };
+        _contentSettle ??= new DispatcherTimer(TimeSpan.FromMilliseconds(420), DispatcherPriority.Background, (_, _) =>
+        {
+            _contentSettle.Stop();
+            Expanded.CacheMode = null;
+            ShowPet();
+        }, Dispatcher);
+        _contentSettle.Stop();
+        _contentSettle.Start();
     }
 
     /// <summary>Without music the small island shows the character instead of the cover, the time moves to the right.</summary>

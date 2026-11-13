@@ -23,6 +23,8 @@ public partial class IslandWindow : Window
     private readonly DispatcherTimer _collapseTimer;
     private readonly IslandSurface _surface = new();
     private bool _expanded, _hovering, _menuOpen;
+    private bool _forGame;
+    private bool _arranging;
     private int _tick;
 
     public IslandWindow()
@@ -33,11 +35,11 @@ public partial class IslandWindow : Window
         Loaded += (_, _) => { ApplyLook(); _surface.SetVisible(true); KeepOnTop(); };
 
         _collapseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) }; // short grace period against accidental mouse-outs
-        _collapseTimer.Tick += (_, _) => { _collapseTimer.Stop(); if (!_hovering && !_menuOpen && !Settings.Current.AlwaysExpanded) SetExpanded(false); };
+        _collapseTimer.Tick += (_, _) => { _collapseTimer.Stop(); if (!_hovering && !_menuOpen && !_arranging && !Settings.Current.AlwaysExpanded) SetExpanded(false); };
 
         _sys.Updated += CheckHeat;
         _media.Updated += UpdateMedia;
-        TaskbarWindow.FullscreenChanged += full => { if (full) Hide(); else Show(); _surface.SetVisible(!full); };
+        TaskbarWindow.FullscreenChanged += full => { _forGame = full; if (full) Hide(); else Show(); _surface.SetVisible(!full); };
         VolSlider.Changed += (v, muted) =>
         {
             VolText.Text = $"{v * 100:0}%";
@@ -113,6 +115,7 @@ public partial class IslandWindow : Window
             Animate(_contentScale, ScaleTransform.ScaleYProperty, grow, TimeSpan.FromMilliseconds(90 * k), FadeEase);
             Animate(Compact, OpacityProperty, 1, TimeSpan.FromMilliseconds(120 * k), FadeEase, 90 * k);
         }
+        if (moving) CacheDuringMotion();
         Expanded.IsHitTestVisible = expand;
         ShowPet();
         if (expand && _page == 0) RefreshActions();
@@ -136,6 +139,10 @@ public partial class IslandWindow : Window
     private void ShowEditState()
     {
         bool on = WidgetMover.Editing;
+        // While arranging the island stays open, so its space on the screen can be seen.
+        _arranging = on;
+        if (on) SetExpanded(true);
+        else if (!_hovering && !Settings.Current.AlwaysExpanded) _collapseTimer.Start();
         EditTab.Background = on ? new SolidColorBrush(Color.FromRgb(0xE6, 0xE6, 0xE6)) : new SolidColorBrush(Color.FromRgb(0x0A, 0x0A, 0x0A));
         EditGlyph.Foreground = on ? Brushes.Black : Brushes.White;
         EditGlyph.Text = on ? "\uE73E" : "\uE70F";
@@ -492,7 +499,7 @@ public partial class IslandWindow : Window
     private void Island_MouseLeave(object sender, MouseEventArgs e)
     {
         _hovering = false;
-        if (Settings.Current.AlwaysExpanded || _menuOpen) return;
+        if (Settings.Current.AlwaysExpanded || _menuOpen || _arranging) return;
         _collapseTimer.Start();
     }
 
@@ -516,6 +523,7 @@ public partial class IslandWindow : Window
         CompactArt.Background = art != null ? new ImageBrush(art) { Stretch = Stretch.UniformToFill } : new SolidColorBrush(Color.FromArgb(0x22, 255, 255, 255));
         ArtIcon.Visibility = CompactArtIcon.Visibility = art == null ? Visibility.Visible : Visibility.Collapsed;
         if (!ReferenceEquals(art, _glowArt)) { _glowArt = art; ApplyGlow(); }
+        if (Settings.Current.MusicGlow != 0 && _media.IsPlaying && !_glowTimer.IsEnabled) _glowTimer.Start();
         SendMedia();
         ShowEqualizer();
         UpdateProgress();
@@ -527,6 +535,8 @@ public partial class IslandWindow : Window
     private readonly DispatcherTimer _glowTimer = new() { Interval = TimeSpan.FromMilliseconds(50) };
     private object _glowArt;
     private double _glowLevel;
+    private double _glowAverage;
+    private DateTime _lastBeat;
 
     /// <summary>
     /// A soft light at the lower edge that follows the real audio level. Only the opacity of this one small element changes,
@@ -537,6 +547,7 @@ public partial class IslandWindow : Window
         int mode = Settings.Current.MusicGlow;
         var color = mode == 2 && _media.Art is System.Windows.Media.Imaging.BitmapSource art ? Theme.CoverColor(art) : Theme.Accent;
         _surface.SetGlowColor(color);
+        _surface.SetLaser(mode != 0, color);
         if (mode == 0) { _glowTimer.Stop(); _surface.SetGlow(0); }
         else _glowTimer.Start();
     }
@@ -544,9 +555,15 @@ public partial class IslandWindow : Window
     private void GlowTick()
     {
         // Falls off gently, so it pulses with the beat instead of flickering.
-        double peak = IsVisible && _media.IsPlaying ? Volume.Peak() : 0;
+        double peak = IsVisible && _media.IsPlaying ? Math.Sqrt(Volume.Peak()) : 0;
         _glowLevel = Math.Max(peak, _glowLevel * 0.82);
-        _surface.SetGlow((float)Math.Min(0.9, _glowLevel * 1.3));
+        // A beat: clearly louder than the recent average, at most every 180 ms.
+        _glowAverage += (peak - _glowAverage) * 0.08;
+        bool beat = peak > 0.35 && peak > _glowAverage * 1.35 && (DateTime.Now - _lastBeat).TotalMilliseconds > 180;
+        if (beat) _lastBeat = DateTime.Now;
+        _surface.SetLaserLevel((float)_glowLevel, beat);
+        _surface.SetGlow((float)Math.Min(0.35, _glowLevel * 0.4)); // a soft light under the lasers
+        if (!_media.IsPlaying && _glowLevel < 0.01) { _glowLevel = 0; _glowTimer.Stop(); } // silence: no timer at all until music plays again
     }
 
     // ---------- heat alarm ----------
@@ -593,6 +610,8 @@ public partial class IslandWindow : Window
         else CompactProgress();
         if (!_media.HasSession && _heatText == null && _flash == null && CompactTitle.Text != IdleText()) UpdateMedia();
         if (_tick % 8 == 0) KeepOnTop();
+        // Watchdog: outside of games the island must be there. If Windows hid it (Explorer restart, display change), bring it back.
+        if (_tick % 20 == 0 && !_forGame && !IsVisible) { Show(); _surface.SetVisible(true); ApplyLook(); }
     }
 
     // ---------- media / volume ----------

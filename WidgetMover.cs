@@ -34,6 +34,7 @@ internal static class WidgetMover
     {
         if (on == Editing) return;
         Editing = on;
+        ShowGrid(on);
         foreach (var (w, key) in Widgets)
         {
             w.Cursor = on ? Cursors.SizeAll : null;
@@ -56,6 +57,34 @@ internal static class WidgetMover
         }
         if (!on) Settings.Current.Save();
         Changed?.Invoke();
+    }
+
+    private static Window _grid;
+
+    /// <summary>A faint dot grid over the screen while arranging, the same 16 pixels the widgets snap to. It lets every click through.</summary>
+    private static void ShowGrid(bool on)
+    {
+        if (!on) { _grid?.Hide(); return; }
+        if (_grid == null)
+        {
+            var area = SystemParameters.WorkArea;
+            var dot = new DrawingBrush(new GeometryDrawing(new SolidColorBrush(Color.FromArgb(0x30, 255, 255, 255)), null, new RectangleGeometry(new Rect(0, 0, 1.5, 1.5))))
+            {
+                TileMode = TileMode.Tile, Viewport = new Rect(0, 0, Grid, Grid), ViewportUnits = BrushMappingMode.Absolute, Viewbox = new Rect(0, 0, Grid, Grid), ViewboxUnits = BrushMappingMode.Absolute, Stretch = Stretch.None,
+            };
+            _grid = new Window
+            {
+                WindowStyle = WindowStyle.None, AllowsTransparency = true, ShowInTaskbar = false, Topmost = true, ShowActivated = false, ResizeMode = ResizeMode.NoResize,
+                Left = area.Left, Top = area.Top, Width = area.Width, Height = area.Height, Background = new SolidColorBrush(Color.FromArgb(0x30, 0, 0, 0)),
+                Content = new System.Windows.Controls.Border { Background = dot, Margin = new Thickness(Gap, Gap, 0, 0) },
+            };
+            _grid.SourceInitialized += (_, _) =>
+            {
+                var h = new WindowInteropHelper(_grid).Handle;
+                Native.SetWindowLong(h, Native.GWL_EXSTYLE, Native.GetWindowLong(h, Native.GWL_EXSTYLE) | 0x20 /* click-through */ | Native.WS_EX_TOOLWINDOW | Native.WS_EX_NOACTIVATE);
+            };
+        }
+        _grid.Show();
     }
 
     private static void Frame(Window w, bool on)
@@ -88,21 +117,68 @@ internal static class WidgetMover
             }
         });
 
+        // Own drag instead of DragMove: the widget follows the mouse and snaps to the grid and to its neighbours as it moves.
         Point? down = null;
+        Point grab = default;
+        bool dragging = false;
         w.PreviewMouseLeftButtonDown += (_, e) => down = Editing && e.OriginalSource is not FrameworkElement { Tag: "remove" } ? e.GetPosition(w) : null;
-        w.PreviewMouseLeftButtonUp += (_, _) => down = null;
         w.PreviewMouseMove += (_, e) =>
         {
             if (down is not { } start || e.LeftButton != MouseButtonState.Pressed) { down = null; return; }
-            var v = e.GetPosition(w) - start;
-            if (Math.Abs(v.X) < DragThreshold && Math.Abs(v.Y) < DragThreshold) return;
-            down = null;
-            w.DragMove();
-            Remember(w, key);
-            Settings.Current.Save();
+            if (!dragging)
+            {
+                var v = e.GetPosition(w) - start;
+                if (Math.Abs(v.X) < DragThreshold && Math.Abs(v.Y) < DragThreshold) return;
+                dragging = true;
+                grab = start;
+                w.CaptureMouse();
+            }
+            var mouse = w.PointToScreen(e.GetPosition(w));
+            var dpi = VisualTreeHelper.GetDpi(w);
+            var (x, y) = Snap(w, mouse.X / dpi.DpiScaleX - grab.X, mouse.Y / dpi.DpiScaleY - grab.Y);
+            w.Left = x;
+            w.Top = y;
         };
-        // While arranging, clicks inside a widget only move it; its own keys stay quiet.
-        w.PreviewMouseLeftButtonUp += (_, e) => { if (Editing && e.OriginalSource is not FrameworkElement { Tag: "remove" }) e.Handled = true; };
+        w.PreviewMouseLeftButtonUp += (_, e) =>
+        {
+            down = null;
+            if (dragging)
+            {
+                dragging = false;
+                w.ReleaseMouseCapture();
+                Remember(w, key);
+                Settings.Current.Save();
+            }
+            // While arranging, clicks inside a widget only move it; its own keys stay quiet.
+            if (Editing && e.OriginalSource is not FrameworkElement { Tag: "remove" }) e.Handled = true;
+        };
+    }
+
+    private const double Grid = 16, Magnet = 14, Gap = 12;
+
+    /// <summary>
+    /// Snapping: edges of other widgets and of the screen pull within a few pixels (with a small gap between widgets,
+    /// or flush with their edges); otherwise the position falls on a 16-pixel grid.
+    /// </summary>
+    private static (double X, double Y) Snap(Window w, double x, double y)
+    {
+        double width = w.ActualWidth, height = w.ActualHeight;
+        var area = SystemParameters.WorkArea;
+        var xs = new List<double> { area.Left + Gap, area.Right - Gap - width };
+        var ys = new List<double> { area.Top + Gap, area.Bottom - Gap - height };
+        foreach (var (other, _) in Widgets)
+        {
+            if (other == w || !other.IsVisible) continue;
+            double l = other.Left, t = other.Top, r = l + other.ActualWidth, b = t + other.ActualHeight;
+            xs.AddRange(new[] { l, r - width, r + Gap, l - Gap - width });
+            ys.AddRange(new[] { t, b - height, b + Gap, t - Gap - height });
+        }
+        double Pick(double value, List<double> lines, double origin)
+        {
+            var near = lines.OrderBy(l => Math.Abs(l - value)).First();
+            return Math.Abs(near - value) <= Magnet ? near : origin + Math.Round((value - origin) / Grid) * Grid;
+        }
+        return (Pick(x, xs, area.Left), Pick(y, ys, area.Top));
     }
 
     private static bool OnScreen(double left, double top) =>

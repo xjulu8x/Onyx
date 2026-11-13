@@ -44,8 +44,18 @@ public partial class App : Application
         if (!owned) { Shutdown(); return; }
 
         // Never leave the user without a taskbar, even if something crashes.
-        DispatcherUnhandledException += (_, _) => RestoreShell();
-        AppDomain.CurrentDomain.UnhandledException += (_, _) => RestoreShell();
+        // A single error must not end Onyx: it is written to crash.log and Onyx keeps running. Only a burst of errors
+        // (something broken for good) ends it, and then the Windows taskbar comes back first.
+        DispatcherUnhandledException += (_, args) =>
+        {
+            Log(args.Exception);
+            _errors.Enqueue(DateTime.Now);
+            while (_errors.Count > 0 && (DateTime.Now - _errors.Peek()).TotalSeconds > 30) _errors.Dequeue();
+            if (_errors.Count < 20) { args.Handled = true; return; }
+            RestoreShell();
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, args) => { Log(args.ExceptionObject as Exception); RestoreShell(); };
+        TaskScheduler.UnobservedTaskException += (_, args) => { Log(args.Exception); args.SetObserved(); };
         AppDomain.CurrentDomain.ProcessExit += (_, _) => RestoreShell();
 
         // Our windows never take focus, so a context menu wouldn't notice clicks elsewhere on the screen.
@@ -62,6 +72,16 @@ public partial class App : Application
         // 2.0: the island hangs as a notch at the top edge, and the taskbar is a dock with apps only.
         if (Settings.Current.Layout < 2) { Settings.Current.IslandShape = 1; Settings.Current.TaskbarShape = 1; Settings.Current.Layout = 2; Settings.Current.Save(); }
         // 2.2: terminal look: flat dark sheets, thin lines, dot grid, almost square corners. The glass look is gone.
+        // 2.8: no more themes and profiles; the music light is on.
+        if (Settings.Current.Layout >= 3 && Settings.Current.Layout < 4)
+        {
+            var s = Settings.Current;
+            s.AutoTheme = false;
+            s.Profiles.Clear();
+            if (s.MusicGlow == 0) s.MusicGlow = 2;
+            s.Layout = 4;
+            s.Save();
+        }
         if (Settings.Current.Layout < 3)
         {
             var s = Settings.Current;
@@ -69,7 +89,8 @@ public partial class App : Application
             (s.TaskbarRadius, s.IslandCorners, s.RimStyle, s.Grain, s.IndicatorStyle, s.IconTint) = (4, 0.3, 1, true, 1, 0);
             s.FontFamily = Theme.Fonts[0].Family;
             (s.DayTheme, s.NightTheme) = ("Mono", "Mono");
-            s.Layout = 3;
+            s.Layout = 4;
+            s.MusicGlow = 2;
             s.Save();
         }
         Theme.ApplyFont();
@@ -351,6 +372,21 @@ public partial class App : Application
             w.UpdateLayout();
             w.Left = right - w.ActualWidth;
         }
+    }
+
+    private readonly Queue<DateTime> _errors = new();
+
+    /// <summary>Appends an error to the file crash.log next to the settings (kept small), so a problem can be found later.</summary>
+    public static void Log(Exception e)
+    {
+        if (e == null) return;
+        try
+        {
+            var file = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Onyx", "crash.log");
+            if (System.IO.File.Exists(file) && new System.IO.FileInfo(file).Length > 256 * 1024) System.IO.File.Delete(file);
+            System.IO.File.AppendAllText(file, $"--- {DateTime.Now:yyyy-MM-dd HH:mm:ss} {typeof(App).Assembly.GetName().Version}\n{e}\n\n");
+        }
+        catch { }
     }
 
     private void RestoreShell()

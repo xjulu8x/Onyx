@@ -43,40 +43,116 @@ public partial class SettingsWindow : Window
         };
         _pages = new (string, string, Action)[]
         {
-            ("", "Allgemein", General), ("", "Aussehen", Look), ("", "Taskleiste", Taskbar),
-            ("", "Island", Island), ("", "Widgets", Widgets), ("", "Themes", Themes), ("", "Effekte", Effects),
-            ("\uE7FC", "Spiel", Game),
-            ("\uE77B", "Charakter", Character),
+            ("", "Allgemein", General), ("", "Aussehen", Look), ("", "Taskleiste", Taskbar),
+            ("", "Island", Island), ("", "Widgets", Widgets), ("", "Effekte", Effects),
+            ("", "Spiel", Game), ("", "Charakter", Character),
         };
-        for (int i = 0; i < _pages.Length; i++) Nav.Children.Add(NavItem(i));
+        BuildNav();
         Show(_lastPage);
     }
 
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
 
-    // ---------- navigation ----------
+    // ---------- navigation: logo, a switch box, main pages, a fold-out group for the widgets ----------
 
-    private FrameworkElement NavItem(int index)
+    private readonly List<(Border Item, int Page, int Tab)> _nav = new();
+    private static bool _widgetsOpen = true;
+
+    private void BuildNav()
     {
-        var (glyph, title, _) = _pages[index];
-        var row = new StackPanel { Orientation = Orientation.Horizontal };
-        row.Children.Add(new TextBlock { Text = glyph, FontFamily = (FontFamily)FindResource("Icons"), FontSize = 15, VerticalAlignment = VerticalAlignment.Center });
-        row.Children.Add(new TextBlock { Text = $"{index + 1:00} {title.ToUpperInvariant()}", FontFamily = Theme.Mono, FontSize = 11, Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
-        var item = new Border { CornerRadius = new CornerRadius(2), Padding = new Thickness(10, 8, 10, 8), Margin = new Thickness(0, 1, 0, 1), Cursor = Cursors.Hand, Background = Brushes.Transparent, Child = row };
-        Feedback.SetPress(item, true);
-        item.MouseLeftButtonUp += (_, _) => Show(index);
-        return item;
+        Nav.Children.Clear();
+        _nav.Clear();
+
+        // Switch box like a workspace selector: version, and a menu with update and quit.
+        var box = new Border { Background = new SolidColorBrush(Color.FromArgb(0x10, 255, 255, 255)), BorderBrush = Theme.Res("Line"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(4), Padding = new Thickness(12, 10, 10, 10), Margin = new Thickness(0, 0, 0, 14), Cursor = Cursors.Hand };
+        var boxRow = new Grid();
+        boxRow.Children.Add(new TextBlock { Text = UpdateService.Available is { } v ? $"Update {v} bereit" : $"Version {typeof(App).Assembly.GetName().Version?.ToString(3)}", FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
+        boxRow.Children.Add(new TextBlock { Text = "\n", FontFamily = (FontFamily)FindResource("Icons"), FontSize = 7, LineHeight = 8, LineStackingStrategy = LineStackingStrategy.BlockLineHeight, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center, Foreground = Dim });
+        box.Child = boxRow;
+        Feedback.SetPress(box, true);
+        box.MouseLeftButtonUp += (_, _) =>
+        {
+            var menu = new ContextMenu { PlacementTarget = box, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+            void Entry(string glyph, string text, Action act) { var item = new MenuItem { Header = text, Icon = glyph }; item.Click += (_, _) => act(); menu.Items.Add(item); }
+            if (UpdateService.Available != null) Entry("", "Jetzt aktualisieren", App.InstallUpdate);
+            Entry("", "Widgets anordnen", () => WidgetMover.SetEditing(!WidgetMover.Editing));
+            Entry("", "Onyx beenden", App.Quit);
+            menu.IsOpen = true;
+        };
+        Nav.Children.Add(box);
+
+        Border Item(string glyph, string text, int page, int tab = -1, Brush dot = null, string badge = null, bool child = false)
+        {
+            var row = new Grid();
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(child ? 18 : 28) });
+            row.ColumnDefinitions.Add(new ColumnDefinition());
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            if (dot != null) row.Children.Add(new System.Windows.Shapes.Rectangle { Width = 7, Height = 7, Fill = dot, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center });
+            else row.Children.Add(new TextBlock { Text = glyph, FontFamily = (FontFamily)FindResource("Icons"), FontSize = 14, VerticalAlignment = VerticalAlignment.Center });
+            var label = new TextBlock { Text = text, FontSize = child ? 12.5 : 13.5, VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(label, 1);
+            row.Children.Add(label);
+            if (badge != null)
+            {
+                var b = new TextBlock { Text = badge, FontFamily = Theme.Mono, FontSize = 10, FontWeight = FontWeights.Bold, VerticalAlignment = VerticalAlignment.Center };
+                Grid.SetColumn(b, 2);
+                row.Children.Add(b);
+            }
+            var item = new Border { CornerRadius = new CornerRadius(4), Padding = new Thickness(10, 8, 10, 8), Margin = new Thickness(child ? 18 : 0, 1, 0, 1), Cursor = Cursors.Hand, Background = Brushes.Transparent, Child = row };
+            Feedback.SetPress(item, true);
+            item.MouseLeftButtonUp += (_, _) => { if (tab >= 0) _widgetTab = tab; Show(page); };
+            _nav.Add((item, page, tab));
+            Nav.Children.Add(item);
+            return item;
+        }
+        Border Divider() { var d = new Border { Height = 1, Background = Theme.Res("Line"), Margin = new Thickness(0, 12, 0, 12) }; Nav.Children.Add(d); return d; }
+
+        for (int i = 0; i < 4; i++) Item(_pages[i].Glyph, _pages[i].Title, i);
+        Divider();
+
+        // Widgets: a group that folds open, its categories marked with colored dots; the badge counts the active widgets.
+        int active = new[] { "Stats", "Temp", "Music", "Terminal", "Bonsai", "Weather", "Clock", "Calendar", "Signal", "Koi", "Steam", "Discord" }.Count(_s.CardOn);
+        var head = new Grid { Cursor = Cursors.Hand, Background = Brushes.Transparent, Margin = new Thickness(0, 1, 0, 1) };
+        head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(28) });
+        head.ColumnDefinitions.Add(new ColumnDefinition());
+        head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        head.Children.Add(new TextBlock { Text = _pages[4].Glyph, FontFamily = (FontFamily)FindResource("Icons"), FontSize = 14, VerticalAlignment = VerticalAlignment.Center });
+        var headText = new TextBlock { Text = $"Widgets  ·  {active}", FontSize = 13.5, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
+        Grid.SetColumn(headText, 1);
+        head.Children.Add(headText);
+        var chevron = new TextBlock { Text = _widgetsOpen ? "" : "", FontFamily = (FontFamily)FindResource("Icons"), FontSize = 10, VerticalAlignment = VerticalAlignment.Center };
+        Grid.SetColumn(chevron, 2);
+        head.Children.Add(chevron);
+        var headBox = new Border { Padding = new Thickness(10, 8, 10, 8), Child = head };
+        headBox.MouseLeftButtonUp += (_, _) => { _widgetsOpen = !_widgetsOpen; BuildNav(); Highlight(); };
+        Nav.Children.Add(headBox);
+        if (_widgetsOpen)
+        {
+            var colors = new[] { "#E6E6E6", "#4FA8FF", "#C58BFF", "#FF453A", "#30D158" };
+            var names = new[] { "Allgemein", "System", "Zeit & Wetter", "Musik & Spaß", "Freunde" };
+            for (int i = 0; i < names.Length; i++)
+                Item(null, names[i], 4, i, new SolidColorBrush((Color)ColorConverter.ConvertFromString(colors[i])), child: true);
+        }
+        Divider();
+        for (int i = 5; i < _pages.Length; i++) Item(_pages[i].Glyph, _pages[i].Title, i);
+    }
+
+    private void Highlight()
+    {
+        foreach (var (item, page, tab) in _nav)
+        {
+            bool on = page == _lastPage && (tab < 0 || tab == _widgetTab);
+            item.Background = on ? new SolidColorBrush(Color.FromArgb(0x16, 255, 255, 255)) : Brushes.Transparent;
+            item.BorderBrush = on ? Theme.Res("LineHi") : null;
+            item.BorderThickness = new Thickness(on ? 1 : 0);
+            TextElement.SetForeground(item, on || page != 4 ? Brushes.White : Dim);
+        }
     }
 
     private void Show(int index)
     {
         _lastPage = index;
-        for (int i = 0; i < Nav.Children.Count; i++)
-        {
-            var item = (Border)Nav.Children[i];
-            item.Background = i == index ? Selected : Brushes.Transparent;
-            TextElement.SetForeground(item, i == index ? Ink : Brushes.White);
-        }
+        Highlight();
         Page.Children.Clear();
         Page.Children.Add(new TextBlock { Text = _pages[index].Title, FontSize = 26, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 2) });
         Page.Children.Add(new TextBlock { Text = $"ONYX / EINSTELLUNGEN / {index + 1:00}", FontFamily = Theme.Mono, FontSize = 10, Foreground = Dim, Margin = new Thickness(1, 0, 0, 10) });
@@ -230,15 +306,17 @@ public partial class SettingsWindow : Window
 
     private void Look()
     {
-        var themes = Section("Theme");
-        Pick(themes, "Vorlage", Theme.Presets.Select(p => p.Name).ToArray(), Array.FindIndex(Theme.Presets, p => p.Accent == _s.AccentColor && p.Island == _s.IslandColor), i => { Theme.UsePreset(i); Reload(); });
-
-        var style = Section("Stil");
-        Pick(style, "Akzentfarbe", new[] { "Weiß", "Grün", "Rot", "Bernstein" }, Array.IndexOf(Theme.AccentColors, _s.AccentColor), i => { _s.AccentColor = Theme.AccentColors[i]; Theme.ApplyAll(); Reload(); });
-        Pick(style, "Schrift", Theme.Fonts.Select(f => f.Label).ToArray(), Array.FindIndex(Theme.Fonts, f => f.Family == _s.FontFamily), i => { _s.FontFamily = Theme.Fonts[i].Family; Theme.ApplyFont(); });
-        Pick(style, "Rand", new[] { "Keiner", "Dezent", "Akzent", "Lichtlauf" }, _s.RimStyle, i => { _s.RimStyle = i; Theme.ApplyAll(); });
-        Pick(style, "Oberfläche", new[] { "Glatt", "Punktraster" }, _s.Grain ? 1 : 0, i => { _s.Grain = i == 1; Theme.ApplyAll(); });
-        Pick(style, "Animationen", new[] { "Schnell", "Normal", "Aus" }, _s.AnimationSpeed, i => _s.AnimationSpeed = i);
+        // Just colors: click a field, it applies at once everywhere.
+        string[] accents = { "#E6E6E6", "#30D158", "#4FD1C5", "#4FA8FF", "#7FA6F0", "#C58BFF", "#FF6B8A", "#FF453A", "#FF7A45", "#FFB340" };
+        string[] surfaces = { "#0A0A0A", "#121214", "#16171A", "#1E1F23", "#26282C", "#0B1220", "#101A14", "#1A1210", "#16101C" };
+        string[] texts = { "#E6E6E6", "#FFFFFF", "#8E8E8E", "#30D158", "#4FD1C5", "#FFB340", "#FF6B8A", "#C58BFF" };
+        var colors = Section("Farben");
+        Swatches(colors, "Akzent", _s.AccentColor, c => { _s.AccentColor = c; Theme.ApplyAll(); }, accents);
+        Swatches(colors, "Island", _s.IslandColor, c => { _s.IslandColor = c; App.Island.ApplyLook(); }, surfaces);
+        Swatches(colors, "Dock", _s.TaskbarColor, c => { _s.TaskbarColor = c; App.Taskbar.ApplyLook(); }, surfaces);
+        Swatches(colors, "Widget-Schrift", _s.WidgetColor, c => { _s.WidgetColor = c; App.ApplyWidgetLook(); }, texts);
+        var surface = Section("Fläche");
+        Switch(surface, "Punktraster", _s.Grain, v => { _s.Grain = v; Theme.ApplyAll(); }, "Feine Punkte auf Island, Dock und Widgets.");
     }
 
     private void Taskbar()
@@ -279,17 +357,7 @@ public partial class SettingsWindow : Window
 
     private void Widgets()
     {
-        // Categories as tabs, so the page shows only what belongs together.
-        var tabs = new[] { "Allgemein", "System", "Zeit & Wetter", "Musik & Spaß", "Freunde" };
-        var bar = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
-        for (int i = 0; i < tabs.Length; i++)
-        {
-            int index = i;
-            var chip = Chip($"{i + 1} {tabs[i]}", i == _widgetTab);
-            chip.MouseLeftButtonUp += (_, _) => { _widgetTab = index; Reload(); };
-            bar.Children.Add(chip);
-        }
-        Page.Children.Add(bar);
+        // The categories are chosen in the side bar (the colored dots under "Widgets").
 
         void Cards(string title, params (string Key, string Label, string Hint)[] list)
         {
@@ -346,26 +414,49 @@ public partial class SettingsWindow : Window
             case 4:
                 Cards("Freunde", ("Steam", "Steam", "Freunde online und ihre Spiele."), ("Discord", "Discord", "Server: online, Spiele und Sprachkanäle."));
 
+                // Steam: nothing to type. The account comes from the Steam app; only the friends list has to be public.
                 var steam = Section("Steam");
-                TextSetting(steam, "API-Key", "Kostenlos unter steamcommunity.com/dev/apikey. Bleibt nur auf diesem PC.", _s.SteamKey, true, text => { _s.SteamKey = text; App.Widget<SteamCard>()?.Refresh(); });
-                TextSetting(steam, "Steam-ID", "Die 17-stellige ID oder der Name aus deinem Profil-Link.", _s.SteamId, false, text => { _s.SteamId = text; App.Widget<SteamCard>()?.Refresh(); });
-                ActionRow(steam, "API-Key holen", "Öffnet die Steam-Seite im Browser.", "Öffnen", () => Ascii.Open("https://steamcommunity.com/dev/apikey"));
-                steam.Children.Add(new TextBlock { Text = "Deine Freundesliste muss in den Steam-Privatsphäre-Einstellungen öffentlich sein.", FontFamily = Theme.Mono, FontSize = 10, Foreground = Dim, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 10) });
-
-                var discord = Section("Discord-Bot");
-                discord.Children.Add(new TextBlock
+                string account = SteamCard.LocalAccount();
+                steam.Children.Add(new TextBlock
                 {
-                    Text = "Discord gibt Freundeslisten und private Calls nicht an fremde Apps. Ein eigener Bot auf deinem Server zeigt, wer dort online ist, was gespielt wird und wer in welchem Sprachkanal ist.\n\n" +
-                           "1. Im Developer-Portal eine Anwendung anlegen, unter „Bot“ den Token kopieren.\n" +
-                           "2. Dort „Presence Intent“ und „Server Members Intent“ einschalten.\n" +
-                           "3. Unter „OAuth2 → URL Generator“ Scope „bot“ wählen und den Bot auf deinen Server einladen.\n" +
-                           "4. Den Token hier eintragen.",
-                    FontFamily = Theme.Mono, FontSize = 10, Foreground = Dim, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 6),
+                    Text = account != null ? $"✓ STEAM-KONTO ERKANNT ({account})" : "STEAM NICHT GEFUNDEN – STEAM STARTEN UND ANMELDEN",
+                    FontFamily = Theme.Mono, FontSize = 10, Foreground = account != null ? new SolidColorBrush(Color.FromRgb(0x30, 0xD1, 0x58)) : Dim,
+                    Margin = new Thickness(0, 10, 0, 4),
                 });
-                TextSetting(discord, "Bot-Token", "Bleibt nur auf diesem PC. Gib ihn niemandem.", _s.DiscordToken, true, text => { _s.DiscordToken = text; App.Widget<DiscordCard>()?.Refresh(); });
-                ActionRow(discord, "Developer-Portal", "Öffnet discord.com/developers im Browser.", "Öffnen", () => Ascii.Open("https://discord.com/developers/applications"));
+                ActionRow(steam, "Freundesliste öffentlich machen", "Nur nötig, wenn das Widget „privat“ meldet.", "Öffnen", () => Ascii.Open("https://steamcommunity.com/my/edit/settings"));
+                TextSetting(steam, "Anderes Profil", "Optional: Profil-Link, falls ein anderes Konto gezeigt werden soll.", _s.SteamId, false, text => { _s.SteamId = text; App.Widget<SteamCard>()?.Refresh(); });
+
+                // Discord: three clicks. Discord only shows servers through a bot, so we guide through making one.
+                var discord = Section("Discord");
+                string appId = DiscordCard.AppId(_s.DiscordToken);
+                Step(discord, "1", "Bot anlegen", "Im Developer-Portal „New Application“, dann links „Bot“ → „Reset Token“ → Kopieren.", "Portal öffnen",
+                    () => Ascii.Open("https://discord.com/developers/applications?new_application=true"), appId != null);
+                Step(discord, "2", "Token einfügen", appId != null ? "Token ist gespeichert." : "Kopierten Token aus der Zwischenablage übernehmen.", "Einfügen", () =>
+                {
+                    string token = Clipboard.ContainsText() ? Clipboard.GetText().Trim().Trim('"') : "";
+                    if (DiscordCard.AppId(token) == null) { MessageBox.Show(this, "In der Zwischenablage ist kein Bot-Token.", "Onyx"); return; }
+                    _s.DiscordToken = token;
+                    _s.Save();
+                    App.Widget<DiscordCard>()?.Refresh();
+                    Reload();
+                }, appId != null);
+                Step(discord, "3", "Rechte einschalten", "Auf der Bot-Seite „Presence Intent“ und „Server Members Intent“ an, speichern.", "Bot-Seite",
+                    () => Ascii.Open(appId != null ? $"https://discord.com/developers/applications/{appId}/bot" : "https://discord.com/developers/applications"), false);
+                Step(discord, "4", "Auf Server einladen", "Wähle deinen Server; der Bot sieht nur diesen.", "Einladen",
+                    () => { if (appId != null) Ascii.Open($"https://discord.com/oauth2/authorize?client_id={appId}&scope=bot&permissions=0"); }, false);
+                if (appId != null) ActionRow(discord, "Bot trennen", "Löscht den Token aus Onyx.", "Trennen", () => { _s.DiscordToken = ""; _s.Save(); App.Widget<DiscordCard>()?.Refresh(); Reload(); });
                 break;
         }
+    }
+
+    /// <summary>One numbered step of a setup: number (checked when done), title, hint and a key.</summary>
+    private void Step(StackPanel into, string number, string title, string hint, string button, Action click, bool done)
+    {
+        var row = Line($"{(done ? "✓" : number)}  {title}", hint);
+        ((FrameworkElement)row.Children[0]).Margin = new Thickness(0, 6, 150, 6);
+        if (done) TextElement.SetForeground(row.Children[0], new SolidColorBrush(Color.FromRgb(0x30, 0xD1, 0x58)));
+        row.Children.Add(Action(button, click));
+        into.Children.Add(row);
     }
 
     /// <summary>A text field with an "Übernehmen" key; secrets are shown as dots.</summary>
@@ -396,61 +487,6 @@ public partial class SettingsWindow : Window
         row.Children.Add(field);
         row.Children.Add(use);
         into.Children.Add(row);
-    }
-
-    private void Themes()
-    {
-        var names = Theme.Names().ToArray();
-        var time = Section("Tageszeit");
-        Switch(time, "Automatisch wechseln", _s.AutoTheme, v => { _s.AutoTheme = v; Theme.CheckTimeOfDay(force: true); }, "Um 7 und um 19 Uhr.");
-        Pick(time, "Am Tag", names, Array.IndexOf(names, _s.DayTheme), i => { _s.DayTheme = names[i]; Theme.CheckTimeOfDay(force: true); });
-        Pick(time, "In der Nacht", names, Array.IndexOf(names, _s.NightTheme), i => { _s.NightTheme = names[i]; Theme.CheckTimeOfDay(force: true); });
-
-        const string filter = "Onyx-Theme (*.onyxtheme)|*.onyxtheme";
-        var own = Section("Eigene Themes");
-        var save = Line("Aktuelles Design speichern");
-        save.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(190) });
-        save.ColumnDefinitions.Add(new ColumnDefinition());
-        save.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var name = new TextBox
-        {
-            Text = "Mein Theme", FontFamily = Theme.Mono, FontSize = 12, Foreground = Brushes.White, CaretBrush = Brushes.White, BorderThickness = new Thickness(0), Padding = new Thickness(8, 6, 8, 6),
-            Background = Brushes.Transparent, VerticalContentAlignment = VerticalAlignment.Center,
-        };
-        var field = new Border { Background = Field, BorderBrush = Theme.Res("LineHi"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(2), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0), Child = name };
-        var store = Action("Speichern", () =>
-        {
-            if (string.IsNullOrWhiteSpace(name.Text)) return;
-            Theme.SaveCurrent(name.Text.Trim());
-            Reload();
-        });
-        Grid.SetColumn(field, 1);
-        Grid.SetColumn(store, 2);
-        save.Children.Add(field);
-        save.Children.Add(store);
-        own.Children.Add(save);
-
-        foreach (var theme in _s.CustomThemes.Keys.ToList())
-        {
-            var row = Line(theme);
-            var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
-            buttons.Children.Add(Action("Anwenden", () => { Theme.Use(theme); Reload(); }));
-            var export = Action("Teilen", () =>
-            {
-                var dialog = new Microsoft.Win32.SaveFileDialog { FileName = theme + ".onyxtheme", Filter = filter };
-                if (dialog.ShowDialog(this) == true) Theme.Export(theme, dialog.FileName);
-            });
-            export.Margin = new Thickness(6, 0, 6, 0);
-            buttons.Children.Add(export);
-            buttons.Children.Add(Action("Löschen", () => { _s.CustomThemes.Remove(theme); _s.Save(); Reload(); }));
-            row.Children.Add(buttons);
-            own.Children.Add(row);
-        }
-        ActionRow(own, "Theme-Datei importieren", null, "Importieren", () =>
-        {
-            var dialog = new Microsoft.Win32.OpenFileDialog { Filter = filter };
-            if (dialog.ShowDialog(this) == true && Theme.Import(dialog.FileName) is { } imported) { Theme.Use(imported); Reload(); }
-        });
     }
 
 
@@ -698,13 +734,13 @@ public partial class SettingsWindow : Window
     }
 
     /// <summary>A row of color fields; the chosen one has a white frame.</summary>
-    private void Swatches(StackPanel into, string label, string current, Action<string> apply)
+    private void Swatches(StackPanel into, string label, string current, Action<string> apply, string[] palette = null)
     {
         var row = Line(label);
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
         row.ColumnDefinitions.Add(new ColumnDefinition());
         var wrap = new WrapPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 4, 0, 4) };
-        foreach (var hex in PixelPet.Palette)
+        foreach (var hex in palette ?? PixelPet.Palette)
         {
             var swatch = new Border
             {
@@ -729,45 +765,9 @@ public partial class SettingsWindow : Window
     private void Effects()
     {
         var effects = Section("Island");
-        Pick(effects, "Musik-Glow", new[] { "Aus", "Akzent", "Cover" }, _s.MusicGlow, i => { _s.MusicGlow = i; App.Island.ApplyGlow(); });
+        Pick(effects, "Musik-Licht", new[] { "Aus", "Akzent", "Cover" }, _s.MusicGlow, i => { _s.MusicGlow = i; App.Island.ApplyGlow(); });
         Switch(effects, "Hitze-Alarm", _s.HeatAlarm, v => _s.HeatAlarm = v, "Die Island wird rot, wenn CPU oder GPU zu heiß werden.");
         Slider(effects, "Warnen ab", 70, 100, () => _s.HeatLimit, v => _s.HeatLimit = Math.Round(v), v => $"{v:0} °C");
 
-        var profiles = Section("Profile");
-        profiles.Children.Add(new TextBlock { Text = "Solange eine dieser Apps im Vordergrund ist, gilt ihr Theme.", FontSize = 12, Foreground = Dim, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 6) });
-        foreach (var (program, theme) in _s.Profiles.ToList())
-        {
-            var row = Line(Path.GetFileNameWithoutExtension(program));
-            var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
-            var next = Action(theme, () =>
-            {
-                var names = Theme.Names();
-                _s.Profiles[program] = names[(names.IndexOf(_s.Profiles[program]) + 1) % names.Count];
-                _s.Save();
-                Reload();
-            });
-            next.ToolTip = "Klicken wechselt das Theme";
-            next.Margin = new Thickness(0, 0, 6, 0);
-            buttons.Children.Add(next);
-            buttons.Children.Add(Action("Entfernen", () => { _s.Profiles.Remove(program); _s.Save(); Reload(); }));
-            row.Children.Add(buttons);
-            profiles.Children.Add(row);
-        }
-        Button add = null;
-        add = Action("Hinzufügen", async () =>
-        {
-            var apps = (await Task.Run(FlyoutWindow.CollectRunningApps)).Where(a => a.HasWindow).OrderBy(a => a.Name).ToList();
-            var menu = new ContextMenu { PlacementTarget = add, Placement = PlacementMode.Bottom };
-            foreach (var running in apps)
-            {
-                var item = new MenuItem { Header = running.Name };
-                item.Click += (_, _) => { _s.Profiles[Path.GetFileName(running.Path)] = Theme.Names()[0]; _s.Save(); Reload(); };
-                menu.Items.Add(item);
-            }
-            menu.IsOpen = menu.Items.Count > 0;
-        });
-        var addRow = Line("Laufende App");
-        addRow.Children.Add(add);
-        profiles.Children.Add(addRow);
     }
 }

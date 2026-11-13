@@ -45,7 +45,6 @@
 
                 <!-- Expanded panel (fixed size so nothing reflows while the island animates) -->
                 <Grid x:Name="Expanded" Width="820" Height="330" HorizontalAlignment="Center" VerticalAlignment="Top" Opacity="0" IsHitTestVisible="False">
-                    <Grid.CacheMode><BitmapCache EnableClearType="False" SnapsToDevicePixels="True"/></Grid.CacheMode>
                     <Grid Margin="16,12,16,14">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="34"/>
