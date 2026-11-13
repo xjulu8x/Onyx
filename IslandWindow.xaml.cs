@@ -99,7 +99,36 @@ public partial class IslandWindow : Window
         if (expand) SizeContent();
         var hide = new DoubleAnimation(0, TimeSpan.FromMilliseconds(70 * k)) { EasingFunction = FadeEase };
         double grow = Theme.ReduceMotion ? 1 : 0.96;
-        if (expand)
+        // Smoothest way: the panel is a picture on the GPU while it moves, on the same spring as the body, so all parts
+        // stay in step. Once it has settled, the live controls take over at the same spot (they look exactly the same).
+        bool gpu = moving && !Theme.ReduceMotion && _page != 2 && Settings.Current.AnimationSpeed != 2;
+        _swap?.Stop();
+        if (gpu && !expand) TakePanelPicture();
+        if (gpu && _surface.HasPanel)
+        {
+            foreach (var p in new[] { ScaleTransform.ScaleXProperty, ScaleTransform.ScaleYProperty }) { _contentScale.BeginAnimation(p, null); _contentScale.SetValue(p, 1.0); }
+            Expanded.BeginAnimation(OpacityProperty, null);
+            Expanded.Opacity = 0;
+            _surface.MovePanel(expand);
+            if (expand)
+            {
+                Compact.BeginAnimation(OpacityProperty, hide);
+                _swap = new DispatcherTimer(TimeSpan.FromMilliseconds(300), DispatcherPriority.Render, (_, _) =>
+                {
+                    _swap.Stop();
+                    if (!_expanded) return;
+                    Expanded.Opacity = 1;
+                    _surface.HidePanel();
+                    ShowPet();
+                }, Dispatcher);
+            }
+            else
+            {
+                Animate(Compact, OpacityProperty, 1, TimeSpan.FromMilliseconds(120 * k), FadeEase, 90 * k);
+                _swap = new DispatcherTimer(TimeSpan.FromMilliseconds(90), DispatcherPriority.Render, (_, _) => { _swap.Stop(); if (!_expanded) SizeContent(); }, Dispatcher);
+            }
+        }
+        else if (expand)
         {
             Compact.BeginAnimation(OpacityProperty, hide);
             Animate(Expanded, OpacityProperty, 1, TimeSpan.FromMilliseconds(120 * k), FadeEase, 110 * k); // once the body has nearly reached its size, so nothing floats outside it
@@ -126,6 +155,37 @@ public partial class IslandWindow : Window
         ShowEqualizer();
         // The open page (player or settings) is kept, so hovering again continues where the user left off.
         if (expand) VolSlider.Refresh();
+    }
+
+    private DispatcherTimer _swap;
+    public System.Windows.Media.Imaging.BitmapSource LastPanel { get; private set; }
+    public void TakePicture() => TakePanelPicture();
+
+    /// <summary>
+    /// Draws the open panel (with the character) into a picture for the GPU. Done on closing, so the picture is what
+    /// was just seen, and every few seconds while closed, so it is fresh for the next opening.
+    /// </summary>
+    private void TakePanelPicture()
+    {
+        if (!_surface.MediaReady || Expanded.ActualWidth <= 0) return;
+        try
+        {
+            var s = Settings.Current;
+            double k = VisualTreeHelper.GetDpi(this).DpiScaleX * s.IslandScale;
+            double opacity = Expanded.Opacity, sx = _contentScale.ScaleX, sy = _contentScale.ScaleY;
+            Expanded.Opacity = 1;
+            _contentScale.ScaleX = _contentScale.ScaleY = 1;
+            var image = new System.Windows.Media.Imaging.RenderTargetBitmap((int)(ExpandedW * k), (int)(ExpandedH * k), 96 * k, 96 * k, PixelFormats.Pbgra32);
+            image.Render(Expanded);
+            if (PetLayer.Visibility == Visibility.Visible) image.Render(PetLayer);
+            Expanded.Opacity = opacity;
+            _contentScale.ScaleX = sx; _contentScale.ScaleY = sy;
+            image.Freeze();
+            LastPanel = image;
+            float corner = s.IslandShape == 1 ? (float)(ExpandedRadius * s.IslandCorners) : 0;
+            _surface.SetPanel(image, (float)(corner * k));
+        }
+        catch (Exception e) { App.Log(e); }
     }
 
     private void EditTab_Click(object sender, MouseButtonEventArgs e)
@@ -386,13 +446,15 @@ public partial class IslandWindow : Window
             if (_media.Art == null) cover.Child = new TextBlock { Text = "", FontFamily = (FontFamily)FindResource("Icons"), FontSize = 30, Foreground = Brushes.White, Opacity = 0.65, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
             art = Render(cover, 120, 120);
         }
-        string smallKey = CompactTitle.Text + font;
+        bool centered = NotchPetOn; // the time sits in the middle of the notch while the character lives there
+        string smallKey = CompactTitle.Text + font + centered;
         if (smallKey != _smallKey)
         {
             _smallKey = smallKey;
             var title = Text(CompactTitle.Text.ToUpperInvariant(), 11, FontWeights.Bold, 1);
             title.FontFamily = Theme.Mono;
-            small = Render(title, CompactW - 24 - 22 - 42, 18);
+            if (centered) { title.TextAlignment = TextAlignment.Center; small = Render(title, CompactW, 18); }
+            else small = Render(title, CompactW - 24 - 22 - 42, 18);
         }
         string bigKey = TitleText.Text + "|" + Artist.Text + font;
         if (bigKey != _bigKey)
@@ -431,7 +493,7 @@ public partial class IslandWindow : Window
         // Expanded: the music card (tabs 12+34, gap 8, card padding 14), compact: left in the notch.
         float artSize = _expanded ? 120 : Capsule ? 28 : 22;
         float artX = _expanded ? 30 : 12, artY = _expanded ? 68 : (float)((CompactH - artSize) / 2);
-        float textX = NotchPetOn ? (float)(CompactW - 54) : artX + artSize + (_expanded ? 14 : 9), textY = _expanded ? 86 : (float)((CompactH - 18) / 2);
+        float textX = NotchPetOn && !_expanded ? 0 : artX + artSize + (_expanded ? 14 : 9), textY = _expanded ? 86 : (float)((CompactH - 18) / 2);
         _surface.SetTextScale(k / (float)TextScale);
         _surface.MoveMedia(new System.Numerics.Vector2(artX * k, (artY + corner) * k), artSize * k, new System.Numerics.Vector2(textX * k, (textY + corner) * k), _expanded, animate);
     }
@@ -628,6 +690,7 @@ public partial class IslandWindow : Window
         else CompactProgress();
         if (!_media.HasSession && _heatText == null && _flash == null && CompactTitle.Text != IdleText()) UpdateMedia();
         if (_tick % 8 == 0) KeepOnTop();
+        if (_tick % 12 == 6 && !_expanded && IsVisible && !_forGame && Settings.Current.AnimationSpeed != 2) TakePanelPicture(); // fresh picture for the next opening
         // Watchdog: outside of games the island must be there. If Windows hid it (Explorer restart, display change), bring it back.
         if (_tick % 20 == 0 && !_forGame && !IsVisible) { Show(); _surface.SetVisible(true); ApplyLook(); }
     }

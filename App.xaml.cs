@@ -274,6 +274,14 @@ public partial class App : Application
                 island.ForceExpand();
                 island.RenderPages(dir);
                 System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "pet.txt"), island.PetDebug());
+                island.TakePicture();
+                if (island.LastPanel != null)
+                {
+                    var panelPng = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                    panelPng.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(island.LastPanel));
+                    using var panelFile = System.IO.File.Create(System.IO.Path.Combine(dir, "panel.png"));
+                    panelPng.Save(panelFile);
+                }
             }
             var settings = new SettingsWindow { ShowActivated = false, Left = -3000 };
             settings.Show();

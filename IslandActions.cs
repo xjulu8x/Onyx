@@ -147,7 +147,7 @@ public partial class IslandWindow
     /// <summary>The character only moves while it can be seen: island open on the start page.</summary>
     private void ShowPet()
     {
-        Pet.Running = _expanded && _page == 0;
+        Pet.Running = _expanded && _page == 0 && _swap?.IsEnabled != true; // starts when the live panel is shown
         UpdateNotchPet();
     }
 
@@ -162,8 +162,11 @@ public partial class IslandWindow
         bool on = NotchPetOn;
         NotchPet.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
         NotchPet.Running = on;
+        NotchPet.ObstacleHalfWidth = 26; // the time in the middle: the character has to duck under it
         if (on == _notchPetShown) return;
         _notchPetShown = on;
+        _smallKey = null; // the time moves to the middle (or back), so its picture is made again
+        SendMedia();
         _surface.ShowMedia(!on && (!_expanded || _page == 0));
         MoveMedia(animate: false);
         ShowEqualizer();

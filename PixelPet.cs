@@ -68,6 +68,10 @@ public sealed class PixelPet : FrameworkElement
     /// <summary>Extra magnification, for the big preview in the settings.</summary>
     public double Zoom { get; set; } = 1;
 
+    /// <summary>Half the width of something in the middle (the time in the notch) that the character ducks under; 0 = nothing.</summary>
+    public double ObstacleHalfWidth { get; set; }
+    private double _crouch = 1;
+
     private readonly DispatcherTimer _timer = new(DispatcherPriority.Background);
     private readonly Random _random = new();
     private readonly List<Bit> _bits = new();
@@ -183,6 +187,14 @@ public sealed class PixelPet : FrameworkElement
             return;
         }
         double sleep = night ? 0.3 : 0.07;
+        if (ObstacleHalfWidth > 0 && r > sleep && r < sleep + 0.5)
+        {
+            // In the notch it likes to cross to the other side, under the time.
+            double floor2 = Math.Max(1, ActualWidth - W * Pixel), mid = floor2 / 2;
+            _target = _x < mid ? mid + _random.NextDouble() * mid : _random.NextDouble() * mid;
+            Start(Act.Walk, Frames(30));
+            return;
+        }
         if (r < sleep) Start(Act.Sleep, Frames(night ? 60 + _random.Next(120) : 15 + _random.Next(30)));
         else if (r < sleep + 0.42)
         {
@@ -241,6 +253,16 @@ public sealed class PixelPet : FrameworkElement
                     break;
             }
         }
+        // Under the time in the notch: duck low and crawl through, never stop beneath it.
+        bool under = false;
+        if (ObstacleHalfWidth > 0)
+        {
+            double mid = ActualWidth / 2, me = _x + W * p / 2;
+            under = Math.Abs(me - mid) < ObstacleHalfWidth + W * p * 0.3;
+            if (under && _act != Act.Walk && !Sleeping) { _target = me < mid ? Math.Min(floor, mid + ObstacleHalfWidth + W * p * 0.4) : Math.Max(0, mid - ObstacleHalfWidth - W * p * 1.4); Start(Act.Walk, Frames(30)); }
+            if (under) _vel = Math.Clamp(_vel, -0.6, 0.6);
+        }
+        _crouch += ((under ? 0.45 : 1) - _crouch) * (1 - Math.Pow(0.6, k));
         if (Math.Abs(_vel) > 0.05)
         {
             _x += _vel * k;
@@ -295,7 +317,7 @@ public sealed class PixelPet : FrameworkElement
         Secondary(k, music && !Compact);
         _pose = CurrentPose(music && !Compact);
         var look = (Math.Round(_x * 2), Math.Round(_hop * 2), _bits.Count, _facing, Math.Round(_squash, 2), _trail.Count, _pose, Sleeping ? _frame / Frames(1) : 0);
-        double moved = Math.Round(_earRot) + Math.Round(_armL) * 64 + Math.Round(_turn * 8) * 4096 + Math.Round(_hatLag) * 65536 + Math.Round(_footL * 3 + _footR * 7) * 1048576;
+        double moved = Math.Round(_crouch * 20) * 0.001 + Math.Round(_earRot) + Math.Round(_armL) * 64 + Math.Round(_turn * 8) * 4096 + Math.Round(_hatLag) * 65536 + Math.Round(_footL * 3 + _footR * 7) * 1048576;
         if (Compact && look == _lastLook && moved == _lastMoved && _bits.Count == 0) return; // the big one keeps breathing
         _lastMoved = moved;
         _lastLook = look;
@@ -417,7 +439,7 @@ public sealed class PixelPet : FrameworkElement
         // Turning: the character narrows through its middle and opens up the other way.
         double turn = Math.Sign(_turn == 0 ? _facing : _turn) * Math.Max(0.12, Math.Abs(_turn));
         dc.PushTransform(new TranslateTransform(cx, bottom));
-        dc.PushTransform(new ScaleTransform(turn * (2 - _squash), _squash * breathe));
+        dc.PushTransform(new ScaleTransform(turn * (2 - _squash) * (1 + (1 - _crouch) * 0.35), _squash * breathe * _crouch));
 
         var (gcx, gcy, grx, _, gtop, _, gbottom) = Geometry(Math.Clamp(s.PetShape, 0, Shapes.Length - 1));
         var rect = new Rect(-W * p / 2, -H * p, W * p, H * p);

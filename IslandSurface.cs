@@ -61,7 +61,11 @@ internal sealed class IslandSurface
     private ShapeVisual _laser;
     private readonly List<CompositionSpriteShape> _beams = new();
     private bool _laserOn;
-    private readonly SpriteVisual _art, _smallText, _bigText;
+    private readonly SpriteVisual _art, _smallText, _smallTextB, _bigText;
+    private SpriteVisual _smallFront; // the one of the two small texts that is showing
+    private readonly SpriteVisual _panel;
+    private Vector2 _panelSize;
+    private bool _open;
     private Vortice.Direct3D11.ID3D11Device _device; // kept alive with the images
     private Vortice.Direct3D11.ID3D11DeviceContext _context;
     private CompositionGraphicsDevice _graphics;
@@ -139,9 +143,16 @@ internal sealed class IslandSurface
 
         _art = _compositor.CreateSpriteVisual();
         _smallText = _compositor.CreateSpriteVisual();
+        _smallTextB = _compositor.CreateSpriteVisual();
+        _smallTextB.Opacity = 0;
+        _smallFront = _smallText;
         _bigText = _compositor.CreateSpriteVisual();
         _bigText.Opacity = 0;
-        foreach (var part in new[] { _art, _smallText, _bigText }) _pill.Children.InsertAtTop(part);
+        foreach (var part in new[] { _art, _smallText, _smallTextB, _bigText }) _pill.Children.InsertAtTop(part);
+        // Picture of the open panel: it grows on the GPU together with the body, then the live controls take over.
+        _panel = _compositor.CreateSpriteVisual();
+        _panel.Opacity = 0;
+        _pill.Children.InsertBelow(_panel, _art);
         MediaReady = StartGraphics();
 
         _shape = _compositor.CreateRoundedRectangleGeometry();
@@ -195,7 +206,20 @@ internal sealed class IslandSurface
         try
         {
             if (art != null) _art.Brush = Upload(art);
-            if (small != null) { _smallText.Brush = Upload(small); _smallText.Size = new Vector2(small.PixelWidth, small.PixelHeight) * _textScale; }
+            if (small != null)
+            {
+                // New text in the notch (song, Caps Lock, volume): the old one fades out while the new one fades in.
+                var next = _smallFront == _smallText ? _smallTextB : _smallText;
+                next.Brush = Upload(small);
+                next.Size = new Vector2(small.PixelWidth, small.PixelHeight) * _textScale;
+                if (!_open)
+                {
+                    Fade(_smallFront, 0, true, 0, 90);
+                    Fade(next, 1, true, 50, 160);
+                }
+                else { _smallFront.Opacity = 0; next.Opacity = 0; }
+                _smallFront = next;
+            }
             if (big != null) { _bigText.Brush = Upload(big); _bigText.Size = new Vector2(big.PixelWidth, big.PixelHeight) * _textScale; }
         }
         catch (Exception e)
@@ -207,7 +231,7 @@ internal sealed class IslandSurface
             try
             {
                 if (art != null) _art.Brush = Upload(art);
-                if (small != null) _smallText.Brush = Upload(small);
+                if (small != null) _smallFront.Brush = Upload(small);
                 if (big != null) _bigText.Brush = Upload(big);
             }
             catch (Exception again) { App.Log(again); }
@@ -234,6 +258,8 @@ internal sealed class IslandSurface
         }
         Fly(_art, artAt);
         Fly(_smallText, textAt);
+        Fly(_smallTextB, textAt);
+        _open = open;
         Fly(_bigText, textAt);
 
         var size = new Vector2(artSize, artSize);
@@ -245,7 +271,10 @@ internal sealed class IslandSurface
         }
         else { _art.StopAnimation("Size"); _art.Size = size; }
 
-        Fade(_smallText, open ? 0 : 1, animate, open ? 0 : 120, open ? 110 : 180);
+        Fade(_smallFront, open ? 0 : 1, animate, open ? 0 : 120, open ? 110 : 180);
+        var back = _smallFront == _smallText ? _smallTextB : _smallText;
+        back.StopAnimation("Opacity");
+        back.Opacity = 0;
         Fade(_bigText, open ? 1 : 0, animate, open ? 90 : 0, open ? 200 : 110);
     }
 
@@ -315,6 +344,50 @@ internal sealed class IslandSurface
         brush.HorizontalAlignmentRatio = 0.5f;
         brush.VerticalAlignmentRatio = 0;
         _dots.Brush = brush;
+    }
+
+    /// <summary>New picture of the open panel (device pixels), placed centred at the top of the body.</summary>
+    public void SetPanel(System.Windows.Media.Imaging.BitmapSource image, float top)
+    {
+        if (!MediaReady || image == null) return;
+        try { _panel.Brush = Upload(image); }
+        catch (Exception e) { App.Log(e); return; }
+        _panelSize = new Vector2(image.PixelWidth, image.PixelHeight);
+        _panel.Size = _panelSize;
+        _panel.CenterPoint = new Vector3(_panelSize.X / 2, 0, 0);
+        var x = _compositor.CreateExpressionAnimation("Vector3((pill.Size.X - w) / 2, top, 0)");
+        x.SetReferenceParameter("pill", _pill);
+        x.SetScalarParameter("w", _panelSize.X);
+        x.SetScalarParameter("top", top);
+        _panel.StartAnimation("Offset", x);
+    }
+
+    public bool HasPanel => MediaReady && _panel.Brush != null;
+
+    /// <summary>
+    /// Opening: the picture fades in once the body has room and grows from 96 % on the same spring as the body.
+    /// Closing: it fades out quickly and shrinks back. Everything runs on the GPU in step with the body.
+    /// </summary>
+    public void MovePanel(bool open)
+    {
+        if (!HasPanel) return;
+        var (damping, period) = Theme.Spring(open);
+        var grow = _compositor.CreateSpringVector3Animation();
+        grow.DampingRatio = damping; grow.Period = period;
+        grow.FinalValue = new Vector3(open ? 1 : 0.96f, open ? 1 : 0.96f, 1);
+        if (open) _panel.Scale = new Vector3(0.96f, 0.96f, 1);
+        _panel.StartAnimation("Scale", grow);
+        var fade = _compositor.CreateScalarKeyFrameAnimation();
+        if (open) { _panel.Opacity = 0; fade.InsertKeyFrame(1, 1); fade.Duration = TimeSpan.FromMilliseconds(120); fade.DelayTime = TimeSpan.FromMilliseconds(90); }
+        else { _panel.Opacity = 1; fade.InsertKeyFrame(1, 0); fade.Duration = TimeSpan.FromMilliseconds(80); }
+        _panel.StartAnimation("Opacity", fade);
+    }
+
+    /// <summary>The live controls are on screen now: the picture goes away at once.</summary>
+    public void HidePanel()
+    {
+        _panel.StopAnimation("Opacity");
+        _panel.Opacity = 0;
     }
 
     public void SetGlow(float opacity) => _glow.Opacity = opacity;
