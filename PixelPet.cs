@@ -135,7 +135,7 @@ public sealed class PixelPet : FrameworkElement
     {
         get
         {
-            double room = Math.Max(10, (ActualHeight > 0 ? ActualHeight : Compact ? 32 : 140 * Zoom) - (Compact ? 1 : 22)); // in the card: room for the caption above
+            double room = Math.Max(10, (ActualHeight > 0 ? ActualHeight : Compact ? 32 : 140 * Zoom) - (Compact ? 1 : 6)); // the caption sits above its place
             double fit = room / VisibleRows;
             if (Compact) return fit;
             double p = fit * Math.Clamp(Settings.Current.PetSize, 0.5, 1); // 100 % and more fill the card
@@ -144,7 +144,10 @@ public sealed class PixelPet : FrameworkElement
         }
     }
 
-    protected override Size MeasureOverride(Size available) => new(Math.Min(available.Width, 600), Compact ? 32 : 140 * Zoom);
+    // Takes the room it is given; only without a limit it asks for its natural height (asking for more would clip it).
+    protected override Size MeasureOverride(Size available) => new(
+        double.IsInfinity(available.Width) ? 300 : available.Width,
+        double.IsInfinity(available.Height) ? (Compact ? 32 : 140 * Zoom) : Math.Min(available.Height, Compact ? 32 : 140 * Zoom));
 
     private void Add(string kind, double x, double y, double vx, double vy, Color color) =>
         _bits.Add(new Bit { Kind = kind, X = x, Y = y, Vx = vx, Vy = vy, Life = 1, Color = color });

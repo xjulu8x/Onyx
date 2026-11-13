@@ -104,6 +104,9 @@ public partial class App : Application
         if (Settings.Current.VibranceLevel is { } vibrance) Vibrance.Set(vibrance);
         // New resolution or screen: island, dock, crosshair and widgets follow at once.
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged += (_, _) => Dispatcher.BeginInvoke(ScreenChanged);
+        // After standby or unlocking the PC, transparent windows can stay blank: the island is rebuilt then.
+        Microsoft.Win32.SystemEvents.PowerModeChanged += (_, e) => { if (e.Mode == Microsoft.Win32.PowerModes.Resume) Dispatcher.BeginInvoke(() => Island.Recover()); };
+        Microsoft.Win32.SystemEvents.SessionSwitch += (_, e) => { if (e.Reason == Microsoft.Win32.SessionSwitchReason.SessionUnlock) Dispatcher.BeginInvoke(() => Island.Recover()); };
         StartMenu = new StartMenuWindow();
         Flyout = new FlyoutWindow();
         KeyboardHook.WinKeyPressed += () => { Taskbar.Peek(); StartMenu.Toggle(); };
@@ -270,6 +273,7 @@ public partial class App : Application
                 Island = island;
                 island.ForceExpand();
                 island.RenderPages(dir);
+                System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "pet.txt"), island.PetDebug());
             }
             var settings = new SettingsWindow { ShowActivated = false, Left = -3000 };
             settings.Show();
@@ -314,6 +318,7 @@ public partial class App : Application
     private void ScreenChanged()
     {
         Island.ScreenChanged();
+        Island.Recover();
         Taskbar.ScreenChanged();
         Crosshair.Apply();
         // Widgets that would now be off screen move back inside it.

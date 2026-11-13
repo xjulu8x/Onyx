@@ -118,30 +118,39 @@ public partial class IslandWindow
         menu.IsOpen = true;
     }
 
+    /// <summary>
+    /// The character lives on its own layer above the panel: same fade and grow as the panel, placed over its spot.
+    /// So the panel can stay one cached picture (smooth opening) while the character moves.
+    /// </summary>
+    public string PetDebug() => $"spot {PetSpot.ActualWidth}x{PetSpot.ActualHeight} at {PetSpot.TranslatePoint(new Point(0, 0), Expanded)}; pet {Pet.ActualWidth}x{Pet.ActualHeight} set {Pet.Width}x{Pet.Height} at {Canvas.GetLeft(Pet)},{Canvas.GetTop(Pet)}; layer {PetLayer.ActualWidth}x{PetLayer.ActualHeight} clip {PetLayer.Clip}";
+
+    private void WirePet()
+    {
+        PetLayer.RenderTransform = _contentScale;
+        PetLayer.RenderTransformOrigin = new Point(0.5, 0);
+        PetLayer.SetBinding(OpacityProperty, new System.Windows.Data.Binding(nameof(Opacity)) { Source = Expanded });
+        PetLayer.SetBinding(VisibilityProperty, new System.Windows.Data.Binding(nameof(Visibility)) { Source = StartPage });
+        PetLayer.SetBinding(IsHitTestVisibleProperty, new System.Windows.Data.Binding(nameof(IsHitTestVisible)) { Source = Expanded });
+        void Place()
+        {
+            if (PetSpot.ActualWidth <= 0) return;
+            var at = PetSpot.TranslatePoint(new Point(0, 0), Expanded);
+            Canvas.SetLeft(Pet, at.X);
+            Canvas.SetTop(Pet, at.Y);
+            Pet.Width = PetSpot.ActualWidth;
+            Pet.Height = PetSpot.ActualHeight;
+        }
+        PetSpot.SizeChanged += (_, _) => Place();
+        PetSpot.Loaded += (_, _) => Place();
+    }
+
     /// <summary>The character only moves while it can be seen: island open on the start page.</summary>
     private void ShowPet()
     {
-        // While the panel opens or closes it is one cached picture; the character starts once that is over,
-        // so its frames never force the whole panel to be drawn again during the motion.
-        Pet.Running = _expanded && _page == 0 && Expanded.CacheMode == null;
+        Pet.Running = _expanded && _page == 0;
         UpdateNotchPet();
     }
 
-    private DispatcherTimer _contentSettle;
-
-    /// <summary>Caches the panel as one picture for the open/close motion only, then lets it draw normally again.</summary>
-    private void CacheDuringMotion()
-    {
-        Expanded.CacheMode ??= new BitmapCache { EnableClearType = false, SnapsToDevicePixels = true };
-        _contentSettle ??= new DispatcherTimer(TimeSpan.FromMilliseconds(420), DispatcherPriority.Background, (_, _) =>
-        {
-            _contentSettle.Stop();
-            Expanded.CacheMode = null;
-            ShowPet();
-        }, Dispatcher);
-        _contentSettle.Stop();
-        _contentSettle.Start();
-    }
 
     /// <summary>Without music the small island shows the character instead of the cover, the time moves to the right.</summary>
     private bool NotchPetOn => Settings.Current.PetInNotch && !_expanded && !_media.HasSession && _flash == null && _heatText == null;

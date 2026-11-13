@@ -45,6 +45,7 @@
 
                 <!-- Expanded panel (fixed size so nothing reflows while the island animates) -->
                 <Grid x:Name="Expanded" Width="820" Height="330" HorizontalAlignment="Center" VerticalAlignment="Top" Opacity="0" IsHitTestVisible="False">
+                    <Grid.CacheMode><BitmapCache EnableClearType="False" SnapsToDevicePixels="True"/></Grid.CacheMode>
                     <Grid Margin="16,12,16,14">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="34"/>
@@ -134,7 +135,8 @@
                                     <Grid>
                                         <TextBlock x:Name="PetTag" Style="{StaticResource Tag}" VerticalAlignment="Top"/>
                                         <TextBlock x:Name="PetMood" Style="{StaticResource Tag}" VerticalAlignment="Top" HorizontalAlignment="Right"/>
-                                        <local:PixelPet x:Name="Pet" VerticalAlignment="Bottom"/>
+                                        <!-- Place of the character; it is drawn on its own layer above the panel (PetLayer) -->
+                                        <Border x:Name="PetSpot" Margin="0,16,0,0"/>
                                     </Grid>
                                 </Border>
                                 <UniformGrid x:Name="ActionsGrid" Grid.Row="2" Columns="3" Margin="-4,-4,-4,0"/>
@@ -161,6 +163,10 @@
                         <ContentControl x:Name="NotifyPage" Grid.Row="1" Margin="0,8,0,0" Visibility="Collapsed" Focusable="False"/>
                     </Grid>
                 </Grid>
+                <!-- The pixel character, above the cached panel: its frames redraw only this small layer -->
+                <Canvas x:Name="PetLayer" Width="820" Height="330" HorizontalAlignment="Center" VerticalAlignment="Top">
+                    <local:PixelPet x:Name="Pet"/>
+                </Canvas>
             </Grid>
         </Border>
     </Grid>

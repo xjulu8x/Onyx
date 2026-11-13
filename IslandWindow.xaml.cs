@@ -115,7 +115,6 @@ public partial class IslandWindow : Window
             Animate(_contentScale, ScaleTransform.ScaleYProperty, grow, TimeSpan.FromMilliseconds(90 * k), FadeEase);
             Animate(Compact, OpacityProperty, 1, TimeSpan.FromMilliseconds(120 * k), FadeEase, 90 * k);
         }
-        if (moving) CacheDuringMotion();
         Expanded.IsHitTestVisible = expand;
         ShowPet();
         if (expand && _page == 0) RefreshActions();
@@ -180,6 +179,7 @@ public partial class IslandWindow : Window
         }
 
         BuildActions();
+        WirePet();
 
         // Control: big tiles instead of the action center tiles and the tray buttons of the old taskbar.
         void Control(string glyph, string label, string detail, Action run)
@@ -341,7 +341,25 @@ public partial class IslandWindow : Window
 
     // The content window is owned by the body, so Windows keeps it right above the body: raising the body is enough,
     // and the body can neither cover the content nor slip behind other windows.
-    private void KeepOnTop() => _surface.Raise();
+    private void KeepOnTop()
+    {
+        _surface.Raise();
+        // And the content right above it: should Windows ever have put it behind the body, the controls come back.
+        var own = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        if (own != IntPtr.Zero) Native.SetWindowPos(own, Native.HWND_TOPMOST, 0, 0, 0, 0, Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+    }
+
+    /// <summary>After standby, unlock or a display change: the transparent content window is rebuilt, so it can't stay blank.</summary>
+    public void Recover()
+    {
+        if (_forGame) return;
+        Hide();
+        Show();
+        _surface.SetVisible(true);
+        ApplyLook();
+        KeepOnTop();
+        InvalidateVisual();
+    }
 
     // ---------- cover and title on the GPU ----------
 
