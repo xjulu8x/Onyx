@@ -348,7 +348,7 @@ public sealed class PixelPet : FrameworkElement
             return value;
         }
 
-        double sway = Sleeping ? 0 : Math.Sin(t * 1.3) * 2.5;
+        double sway = Sleeping || Compact ? 0 : Math.Sin(t * 1.3) * 2.5; // in the notch it rests still, so it can skip frames
         Spring(ref _earRot, ref _earVel, Math.Clamp(-_vel * 7 / Math.Max(1, p / 2) + _bodyVy * 1.6 + sway, -22, 22), 0.28, 0.62);
         Spring(ref _hatRot, ref _hatVel, Math.Clamp(-_vel * 5 / Math.Max(1, p / 2), -14, 14), 0.3, 0.6);
         _hatLag += (Math.Clamp(-_bodyVy * 0.35, -2.5 * p, 2.5 * p) - _hatLag) * (1 - Math.Pow(0.6, k));
@@ -359,6 +359,7 @@ public sealed class PixelPet : FrameworkElement
         else if (yawning) armL = armR = -115;
         else if (walking) { armL = Math.Sin(phase) * 24; armR = -Math.Sin(phase) * 24; }
         else if (Sleeping) armL = armR = 8;
+        else if (Compact) armL = armR = 0;
         else { armL = Math.Sin(t * 1.6) * 4; armR = Math.Sin(t * 1.6 + 1) * 4; }
         _armL += (armL - _armL) * (1 - Math.Pow(0.55, k));
         _armR += (armR - _armR) * (1 - Math.Pow(0.55, k));
