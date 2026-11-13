@@ -15,7 +15,8 @@ namespace DesktopOverlay;
 public partial class TaskbarWindow : Window
 {
     private const uint ABM_NEW = 0, ABM_REMOVE = 1, ABM_QUERYPOS = 2, ABM_SETPOS = 3, ABE_BOTTOM = 3, ABN_FULLSCREENAPP = 2;
-    private static readonly Brush HoverBrush = new SolidColorBrush(Color.FromArgb(0x1A, 255, 255, 255));
+    private static readonly Brush HoverBrush = new SolidColorBrush(Color.FromArgb(0x10, 255, 255, 255)); // soft fill, like the cards; the line comes from HoverLine
+    private static readonly Brush HoverLine = new SolidColorBrush(Color.FromArgb(0x26, 255, 255, 255));
     private static readonly Brush NoBrush = new SolidColorBrush(Color.FromArgb(0x01, 0, 0, 0));
 
     private IntPtr _hwnd;
@@ -56,11 +57,11 @@ public partial class TaskbarWindow : Window
             b.BorderThickness = new Thickness(rimWidth);
             b.CornerRadius = new CornerRadius(s.TaskbarRadius);
         }
-        StartBtn.Height = s.TaskbarHeight - 6;
+        StartBtn.Height = s.TaskbarHeight - 10;
         foreach (var r in StartLogo.Children.OfType<System.Windows.Shapes.Rectangle>()) r.Fill = Theme.AccentBrush;
         foreach (var btn in _buttons.Values)
         {
-            btn.Root.Height = s.TaskbarHeight - 6;
+            btn.Root.Height = s.TaskbarHeight - 10;
             btn.Icon.Width = btn.Icon.Height = s.TaskbarIconSize;
             ShowIcon(btn);
             SetState(btn, btn.Active, btn.App.Windows.Count > 0);
@@ -190,6 +191,13 @@ public partial class TaskbarWindow : Window
         PositionAppBar();
         HwndSource.FromHwnd(_hwnd).AddHook(WndProc);
         if (Settings.Current.TaskbarAutoHide) ApplyAutoHide();
+    }
+
+    /// <summary>After a change of resolution: the bar moves to the new bottom edge.</summary>
+    public void ScreenChanged()
+    {
+        ApplyLook();
+        if (_hwnd != IntPtr.Zero) PositionAppBar();
     }
 
     private void PositionAppBar()
@@ -469,7 +477,7 @@ public partial class TaskbarWindow : Window
         btn.Active = active;
         ShowIcon(btn);
         btn.Root.Tag = active;
-        if (!btn.Root.IsMouseOver) btn.Root.Background = active ? HoverBrush : NoBrush;
+        if (!btn.Root.IsMouseOver) { btn.Root.Background = active ? HoverBrush : NoBrush; btn.Root.BorderBrush = active ? HoverLine : Brushes.Transparent; }
     }
 
     private AppButton BuildAppButton(AppEntry app)
@@ -493,8 +501,8 @@ public partial class TaskbarWindow : Window
 
         btn.Root = new Border
         {
-            Width = 46, Height = Settings.Current.TaskbarHeight - 6, CornerRadius = new CornerRadius(2), Margin = new Thickness(1, 0, 1, 0),
-            Background = NoBrush, Child = grid, ToolTip = app.Name, Tag = false,
+            Width = 46, Height = Settings.Current.TaskbarHeight - 10, CornerRadius = new CornerRadius(9), Margin = new Thickness(1, 0, 1, 0),
+            Background = NoBrush, BorderThickness = new Thickness(1), BorderBrush = Brushes.Transparent, Child = grid, ToolTip = app.Name, Tag = false,
         };
         btn.Root.MouseEnter += Hover_Enter;
         btn.Root.MouseLeave += Hover_Leave;
@@ -593,11 +601,12 @@ public partial class TaskbarWindow : Window
         try { Process.Start(new ProcessStartInfo(target) { UseShellExecute = true }); } catch { }
     }
 
-    private void Hover_Enter(object sender, MouseEventArgs e) => ((Border)sender).Background = HoverBrush;
+    private void Hover_Enter(object sender, MouseEventArgs e) { var b = (Border)sender; b.Background = HoverBrush; b.BorderBrush = HoverLine; }
     private void Hover_Leave(object sender, MouseEventArgs e)
     {
         var b = (Border)sender;
         b.Background = b.Tag is true ? HoverBrush : NoBrush;
+        b.BorderBrush = b.Tag is true ? HoverLine : Brushes.Transparent;
         // Released outside the icon: spring back instead of staying pressed.
         if (_buttons.Values.FirstOrDefault(x => x.Root == b) is { } btn) Press(btn, 1, 200, Smooth);
     }

@@ -122,7 +122,22 @@
                                 </Grid>
                             </Border>
 
-                            <UniformGrid x:Name="ToolsGrid" Grid.Column="2" Grid.RowSpan="3" Columns="2" Rows="3"/>
+                            <!-- Right side: the pixel character above three quick actions -->
+                            <Grid Grid.Column="2" Grid.RowSpan="3">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="8"/>
+                                    <RowDefinition Height="112"/>
+                                </Grid.RowDefinitions>
+                                <Border Background="{StaticResource Card}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="2" Padding="12,8,12,6">
+                                    <Grid>
+                                        <TextBlock x:Name="PetTag" Style="{StaticResource Tag}" VerticalAlignment="Top"/>
+                                        <TextBlock x:Name="PetMood" Style="{StaticResource Tag}" VerticalAlignment="Top" HorizontalAlignment="Right"/>
+                                        <local:PixelPet x:Name="Pet" VerticalAlignment="Bottom"/>
+                                    </Grid>
+                                </Border>
+                                <UniformGrid x:Name="ActionsGrid" Grid.Row="2" Columns="3" Margin="-4,-4,-4,0"/>
+                            </Grid>
                         </Grid>
 
                         <!-- Steuerung: big tiles and the icons of background apps -->

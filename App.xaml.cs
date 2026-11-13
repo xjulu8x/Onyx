@@ -10,6 +10,7 @@ public partial class App : Application
     public IslandWindow Island { get; private set; }
     public TaskbarWindow Taskbar { get; private set; }
     public StartMenuWindow StartMenu { get; private set; }
+    public CrosshairWindow Crosshair { get; private set; }
     public FlyoutWindow Flyout { get; private set; }
 
     protected override void OnStartup(StartupEventArgs e)
@@ -76,12 +77,20 @@ public partial class App : Application
         Island.Show();
         Taskbar = new TaskbarWindow();
         Taskbar.Show();
+        Crosshair = new CrosshairWindow();
+        Crosshair.Apply();
+        // Saturation chosen in Onyx comes back after a restart (the driver may have reset it).
+        if (Settings.Current.VibranceLevel is { } vibrance) Vibrance.Set(vibrance);
+        // New resolution or screen: island, dock, crosshair and widgets follow at once.
+        Microsoft.Win32.SystemEvents.DisplaySettingsChanged += (_, _) => Dispatcher.BeginInvoke(ScreenChanged);
         StartMenu = new StartMenuWindow();
         Flyout = new FlyoutWindow();
         KeyboardHook.WinKeyPressed += () => { Taskbar.Peek(); StartMenu.Toggle(); };
         KeyboardHook.Install();
         // The × of the arrange mode: hide the widget and remember it, it comes back under Einstellungen → Widgets.
         WidgetMover.Remove = w => { Settings.Current.Cards[KeyOf(w)] = false; Settings.Current.Save(); w.Hide(); };
+        WidgetMover.Resize = (w, k) => { Settings.Current.WidgetScales[KeyOf(w)] = Math.Round(k, 3); ScaleWidget(w); };
+        WidgetMover.OwnScale = w => Settings.Current.WidgetScales.GetValueOrDefault(KeyOf(w), 1);
         _widgets.Add(new StatsWindow());
         _widgets.Add(new TempWindow());
         // Cards of the terminal look (2.3)
@@ -114,6 +123,13 @@ public partial class App : Application
     private SettingsWindow _settings;
 
     /// <summary>Opens the settings, or brings them to the front. Closing frees the window, so it costs nothing until needed.</summary>
+    public void OpenSettings(int page)
+    {
+        SettingsWindow._lastPage = page;
+        _settings?.Close();
+        OpenSettings();
+    }
+
     public void OpenSettings()
     {
         if (_settings == null)
@@ -218,6 +234,14 @@ public partial class App : Application
         }
         try
         {
+            if (Environment.GetCommandLineArgs().Contains("--island"))
+            {
+                // Never shown: the panel is laid out and drawn into images only.
+                Crosshair = new CrosshairWindow();
+                var island = new IslandWindow();
+                island.ForceExpand();
+                island.RenderPages(dir);
+            }
             var settings = new SettingsWindow { ShowActivated = false, Left = -3000 };
             settings.Show();
             settings.RenderPages(dir);
@@ -230,6 +254,20 @@ public partial class App : Application
 
     /// <summary>Name under which a widget is switched on or off: cards by their key, the parts of the system widget by their title.</summary>
     public static string KeyOf(Window w) => w switch { Card c => c.Key, StatsWindow => "Stats", TempWindow => "Temp", _ => w.Title };
+
+    private void ScreenChanged()
+    {
+        Island.ScreenChanged();
+        Taskbar.ScreenChanged();
+        Crosshair.Apply();
+        // Widgets that would now be off screen move back inside it.
+        var area = SystemParameters.WorkArea;
+        foreach (var w in Widgets.Where(w => w.IsVisible))
+        {
+            w.Left = Math.Clamp(w.Left, area.Left, Math.Max(area.Left, area.Right - w.ActualWidth));
+            w.Top = Math.Clamp(w.Top, area.Top, Math.Max(area.Top, area.Bottom - w.ActualHeight));
+        }
+    }
 
     public T Widget<T>() where T : Window => _widgets.OfType<T>().FirstOrDefault();
 
@@ -247,6 +285,18 @@ public partial class App : Application
         Pulse.Refresh();
     }
 
+    /// <summary>
+    /// Size of one widget: the general size times its own (dragged in the arrange mode). Everything inside scales
+    /// together as one picture, so text, lines and dots keep their proportions.
+    /// </summary>
+    public static void ScaleWidget(Window w)
+    {
+        var s = Settings.Current;
+        double k = s.WidgetScale * s.WidgetScales.GetValueOrDefault(KeyOf(w), 1);
+        ((FrameworkElement)w.Content).LayoutTransform = new System.Windows.Media.ScaleTransform(k, k);
+        if (w is StatsWindow || w.Tag is "wide") w.Width = 250 * k;
+    }
+
     public void ApplyWidgetLook()
     {
         var s = Settings.Current;
@@ -261,8 +311,7 @@ public partial class App : Application
             if (w.Content is System.Windows.Controls.Border frame) frame.Background = Theme.Surface("#0A0A0A", 0xF8);
             // Grows and shrinks around the right edge, so widgets next to the screen edge stay on screen.
             double right = w.Left + w.ActualWidth;
-            ((FrameworkElement)w.Content).LayoutTransform = new System.Windows.Media.ScaleTransform(s.WidgetScale, s.WidgetScale);
-            if (w is StatsWindow || w.Tag is "wide") w.Width = 250 * s.WidgetScale;
+            ScaleWidget(w);
             if (!w.IsLoaded || double.IsNaN(right)) continue;
             w.UpdateLayout();
             w.Left = right - w.ActualWidth;

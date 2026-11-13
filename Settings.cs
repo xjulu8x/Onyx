@@ -57,6 +57,7 @@ public class Settings
 
     // Cards of the terminal look (2.3). Missing entries count as switched on.
     public Dictionary<string, bool> Cards { get; set; } = new();
+    public Dictionary<string, double> WidgetScales { get; set; } = new(); // own size of a widget, times WidgetScale
     public bool CardOn(string key) => !Cards.TryGetValue(key, out var on) || on;
     public string WeatherCity { get; set; } = "";
     public double[] WeatherPlace { get; set; } // latitude, longitude of WeatherCity
@@ -71,6 +72,21 @@ public class Settings
     // Pins of the dock (2.4): Onyx keeps its own list instead of changing the Windows taskbar.
     public List<PinItem> OwnPins { get; set; } = new();
     public List<string> HiddenPins { get; set; } = new(); // Windows pins taken off the dock
+
+    // Start page of the island (2.5)
+    public int PetKind { get; set; }
+    public string PetColor { get; set; } = "#E6E6E6";
+    public int PetHat { get; set; }
+    public string PetName { get; set; } = "Pixel";
+    public double? VibranceLevel { get; set; } // saturation chosen in Onyx; null = leave the driver alone
+    public bool CrosshairOn { get; set; }
+    public int CrosshairStyle { get; set; } = 1;
+    public string CrosshairColor { get; set; } = "#00FF66";
+    public double CrosshairSize { get; set; } = 8;
+    public double CrosshairThickness { get; set; } = 2;
+    public double CrosshairGap { get; set; } = 3;
+    public bool CrosshairOutline { get; set; } = true;
+    public double CrosshairOpacity { get; set; } = 1;
 
     // Time-of-day design and own themes
     public bool AutoTheme { get; set; }

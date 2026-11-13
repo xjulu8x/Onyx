@@ -24,7 +24,7 @@ public partial class SettingsWindow : Window
     private static readonly Brush Field = new SolidColorBrush(Color.FromArgb(0x10, 255, 255, 255));
     private static readonly Brush Card = new SolidColorBrush(Color.FromArgb(0x08, 255, 255, 255));
 
-    private static int _lastPage;
+    internal static int _lastPage;
 
     private readonly Settings _s = Settings.Current;
     private App App => (App)Application.Current;
@@ -45,6 +45,7 @@ public partial class SettingsWindow : Window
         {
             ("", "Allgemein", General), ("", "Aussehen", Look), ("", "Taskleiste", Taskbar),
             ("", "Island", Island), ("", "Widgets", Widgets), ("", "Themes", Themes), ("", "Effekte", Effects),
+            ("\uE7FC", "Spiel", Game),
         };
         for (int i = 0; i < _pages.Length; i++) Nav.Children.Add(NavItem(i));
         Show(_lastPage);
@@ -386,6 +387,51 @@ public partial class SettingsWindow : Window
         });
     }
 
+
+    private void Game()
+    {
+        var cross = App.Crosshair;
+        var c = Section("Crosshair");
+        Switch(c, "Crosshair anzeigen", _s.CrosshairOn, v => { _s.CrosshairOn = v; cross.Apply(); }, "Über Spielen im Rahmenlos- oder Fenstermodus; exklusives Vollbild zeichnet über alles.");
+        Pick(c, "Form", CrosshairWindow.Styles, _s.CrosshairStyle, i => { _s.CrosshairStyle = i; cross.Apply(); });
+        Pick(c, "Farbe", CrosshairWindow.ColorNames, Array.IndexOf(CrosshairWindow.Colors, _s.CrosshairColor), i => { _s.CrosshairColor = CrosshairWindow.Colors[i]; cross.Apply(); });
+        Slider(c, "Länge", 2, 30, () => _s.CrosshairSize, v => { _s.CrosshairSize = Math.Round(v); cross.Apply(); }, v => $"{v:0} px");
+        Slider(c, "Dicke", 1, 6, () => _s.CrosshairThickness, v => { _s.CrosshairThickness = Math.Round(v); cross.Apply(); }, v => $"{v:0} px");
+        Slider(c, "Abstand", 0, 15, () => _s.CrosshairGap, v => { _s.CrosshairGap = Math.Round(v); cross.Apply(); }, v => $"{v:0} px");
+        Slider(c, "Deckkraft", 0.2, 1, () => _s.CrosshairOpacity, v => { _s.CrosshairOpacity = Math.Round(v, 2); cross.Apply(); }, v => $"{v * 100:0} %");
+        Switch(c, "Schwarzer Umriss", _s.CrosshairOutline, v => { _s.CrosshairOutline = v; cross.Apply(); }, "Besser sichtbar auf hellem Hintergrund.");
+
+        var d = Section("Anzeige");
+        if (Vibrance.Available)
+        {
+            Slider(d, "Farbsättigung", 0, 1, () => Vibrance.Read() ?? 0.5, v => { Vibrance.Set(v); _s.VibranceLevel = Math.Round(v, 3); }, v => $"{v * 100:0} %");
+            ActionRow(d, "Sättigung zurücksetzen", "Zurück zum Wert des NVIDIA-Treibers.", "Standard", () => { Vibrance.Set(Vibrance.Default()); _s.VibranceLevel = null; _s.Save(); Reload(); });
+        }
+        else d.Children.Add(new TextBlock { Text = "Farbsättigung braucht eine NVIDIA-Grafikkarte.", FontFamily = Theme.Mono, FontSize = 10, Foreground = Dim, Margin = new Thickness(0, 10, 0, 10) });
+        var mode = Display.Current();
+        d.Children.Add(new TextBlock { Text = $"AKTUELL {mode}  ·  WECHSELN ÜBER DIE ISLAND", FontFamily = Theme.Mono, FontSize = 10, Foreground = Dim, Margin = new Thickness(0, 6, 0, 10) });
+
+        var p = Section("Charakter");
+        Pick(p, "Art", PixelPet.Kinds, _s.PetKind, i => _s.PetKind = i);
+        Pick(p, "Farbe", PixelPet.ColorNames, Array.IndexOf(PixelPet.Colors, _s.PetColor), i => _s.PetColor = PixelPet.Colors[i]);
+        Pick(p, "Hut", PixelPet.Hats, _s.PetHat, i => _s.PetHat = i);
+        var row = Line("Name");
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(190) });
+        row.ColumnDefinitions.Add(new ColumnDefinition());
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var name = new TextBox
+        {
+            Text = _s.PetName, MaxLength = 12, FontFamily = Theme.Mono, FontSize = 12, Foreground = Brushes.White, CaretBrush = Brushes.White, BorderThickness = new Thickness(0),
+            Padding = new Thickness(8, 6, 8, 6), Background = Brushes.Transparent, VerticalContentAlignment = VerticalAlignment.Center,
+        };
+        var field = new Border { Background = Field, BorderBrush = Theme.Res("LineHi"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(2), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0), Child = name };
+        var use = Action("Übernehmen", () => { _s.PetName = string.IsNullOrWhiteSpace(name.Text) ? "Pixel" : name.Text.Trim(); _s.Save(); });
+        Grid.SetColumn(field, 1);
+        Grid.SetColumn(use, 2);
+        row.Children.Add(field);
+        row.Children.Add(use);
+        p.Children.Add(row);
+    }
     private void Effects()
     {
         var effects = Section("Island");

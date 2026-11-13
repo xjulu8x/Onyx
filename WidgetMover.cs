@@ -26,6 +26,10 @@ internal static class WidgetMover
     /// <summary>Called with the widget the user removed; the app hides it and remembers that.</summary>
     public static Action<Window> Remove;
 
+    /// <summary>Called while the corner grip is dragged, with the widget's new own size (1 = normal).</summary>
+    public static Action<Window, double> Resize;
+    public static Func<Window, double> OwnScale;
+
     public static void SetEditing(bool on)
     {
         if (on == Editing) return;
@@ -58,7 +62,7 @@ internal static class WidgetMover
     {
         if (w.Content is not UIElement content || AdornerLayer.GetAdornerLayer(content) is not { } layer) return;
         foreach (var old in layer.GetAdorners(content)?.OfType<EditFrame>() ?? Enumerable.Empty<EditFrame>()) layer.Remove(old);
-        if (on) layer.Add(new EditFrame(content, () => Remove?.Invoke(w)));
+        if (on) layer.Add(new EditFrame(content, w));
     }
 
     public static void Detach(Window w) => Widgets.RemoveAll(x => x.Window == w);
@@ -109,7 +113,7 @@ internal static class WidgetMover
     private sealed class EditFrame : Adorner
     {
         private static readonly Pen Dash = MakeDash();
-        private readonly Border _remove;
+        private readonly Border _remove, _grip;
         private readonly VisualCollection _children;
 
         private static Pen MakeDash()
@@ -119,8 +123,9 @@ internal static class WidgetMover
             return pen;
         }
 
-        public EditFrame(UIElement target, Action remove) : base(target)
+        public EditFrame(UIElement target, Window w) : base(target)
         {
+            Action remove = () => Remove?.Invoke(w);
             _remove = new Border
             {
                 Width = 20, Height = 20, Background = new SolidColorBrush(Color.FromRgb(0xFF, 0x45, 0x3A)), CornerRadius = new CornerRadius(2), Cursor = Cursors.Hand,
@@ -128,7 +133,33 @@ internal static class WidgetMover
                 Child = new TextBlock { Text = "×", Foreground = Brushes.White, FontSize = 14, FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, -2, 0, 0), Tag = "remove" },
             };
             _remove.MouseLeftButtonUp += (_, e) => { remove(); e.Handled = true; };
-            _children = new VisualCollection(this) { _remove };
+            // Corner grip: drag to make the widget bigger or smaller; everything in it scales along.
+            _grip = new Border
+            {
+                Width = 16, Height = 16, Background = new SolidColorBrush(Color.FromRgb(0xE6, 0xE6, 0xE6)), CornerRadius = new CornerRadius(2), Cursor = Cursors.SizeNWSE,
+                Tag = "remove", ToolTip = "Größe ziehen",
+                Child = new TextBlock { Text = "\u25E2", Foreground = Brushes.Black, FontSize = 10, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Tag = "remove" },
+            };
+            Point start = default;
+            double startScale = 1, startWidth = 1;
+            _grip.MouseLeftButtonDown += (_, e) =>
+            {
+                start = e.GetPosition(w);
+                startScale = OwnScale?.Invoke(w) ?? 1;
+                startWidth = Math.Max(1, ((FrameworkElement)w.Content).ActualWidth);
+                _grip.CaptureMouse();
+                e.Handled = true;
+            };
+            _grip.MouseMove += (_, e) =>
+            {
+                if (!_grip.IsMouseCaptured) return;
+                var at = e.GetPosition(w);
+                // The window grows to the right and down from its top left corner, so positions in it stay comparable.
+                double grow = Math.Max(at.X - start.X, (at.Y - start.Y) * startWidth / Math.Max(1, ((FrameworkElement)w.Content).ActualHeight));
+                Resize?.Invoke(w, Math.Clamp(startScale * (startWidth + grow) / startWidth, 0.5, 2));
+            };
+            _grip.MouseLeftButtonUp += (_, e) => { _grip.ReleaseMouseCapture(); Settings.Current.Save(); e.Handled = true; };
+            _children = new VisualCollection(this) { _remove, _grip };
         }
 
         protected override int VisualChildrenCount => _children.Count;
@@ -137,12 +168,14 @@ internal static class WidgetMover
         protected override Size ArrangeOverride(Size finalSize)
         {
             _remove.Arrange(new Rect(finalSize.Width - 26, 6, 20, 20));
+            _grip.Arrange(new Rect(finalSize.Width - 20, finalSize.Height - 20, 16, 16));
             return finalSize;
         }
 
         protected override Size MeasureOverride(Size constraint)
         {
             _remove.Measure(new Size(20, 20));
+            _grip.Measure(new Size(16, 16));
             return base.MeasureOverride(constraint);
         }
 

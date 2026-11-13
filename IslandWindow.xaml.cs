@@ -114,6 +114,8 @@ public partial class IslandWindow : Window
             Animate(Compact, OpacityProperty, 1, TimeSpan.FromMilliseconds(120 * k), FadeEase, 90 * k);
         }
         Expanded.IsHitTestVisible = expand;
+        ShowPet();
+        if (expand && _page == 0) RefreshActions();
         Animate(EditTab, OpacityProperty, expand ? 1 : 0, TimeSpan.FromMilliseconds((expand ? 160 : 70) * k), FadeEase, expand ? 140 * k : 0);
         EditTab.IsHitTestVisible = expand;
         // Cover and title belong to the notch and the start page; the activity page is fresh on every open and freed on close.
@@ -170,30 +172,7 @@ public partial class IslandWindow : Window
             Tabs.Children.Add(tab);
         }
 
-        // Tools: the result shows as a short hint in the notch.
-        void Tool(string glyph, string label, Action run)
-        {
-            var row = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-            row.Children.Add(new TextBlock { Text = glyph, FontFamily = (FontFamily)FindResource("Icons"), FontSize = 15, Width = 22, VerticalAlignment = VerticalAlignment.Center });
-            row.Children.Add(new TextBlock { Text = label.ToUpperInvariant(), FontFamily = Theme.Mono, FontSize = 10, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, MaxWidth = 100 });
-            var tile = new Border { Background = Card, BorderBrush = Theme.Res("Line"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(2), Margin = new Thickness(4), Padding = new Thickness(12, 0, 8, 0), Cursor = Cursors.Hand, Child = row };
-            Hover(tile);
-            Press(tile);
-            tile.MouseLeftButtonUp += async (_, _) =>
-            {
-                SetExpanded(false);
-                await Task.Delay(220); // the panel must be gone before a screenshot or a color is taken
-                run();
-            };
-            ToolsGrid.Children.Add(tile);
-        }
-        ToolsGrid.Margin = new Thickness(-4);
-        Tool("", "Bereich", IslandTools.ScreenshotArea);
-        Tool("", "Ganzer Bildschirm", () => IslandTools.ScreenshotFull(Flash));
-        Tool("", "Text vom Bildschirm", () => IslandTools.ReadText(Flash));
-        Tool("", "QR-Code", () => IslandTools.ReadQr(Flash));
-        Tool("", "Pipette", () => IslandTools.PickColor(Flash));
-        Tool("", "Aufnahme", () => IslandTools.Record(Flash));
+        BuildActions();
 
         // Control: big tiles instead of the action center tiles and the tray buttons of the old taskbar.
         void Control(string glyph, string label, string detail, Action run)
@@ -232,6 +211,8 @@ public partial class IslandWindow : Window
             ((TextBlock)tab.Child).Foreground = i == index ? TabTextOn : TabText;
         }
         StartPage.Visibility = index == 0 ? Visibility.Visible : Visibility.Collapsed;
+        ShowPet();
+        if (index == 0) RefreshActions();
         ControlPage.Visibility = index == 1 ? Visibility.Visible : Visibility.Collapsed;
         NotifyPage.Visibility = index == 2 ? Visibility.Visible : Visibility.Collapsed;
         // Cover and title live on the start page only.
@@ -244,13 +225,17 @@ public partial class IslandWindow : Window
     /// <summary>Debug aid for --snapshot: renders each page of the open panel to a PNG file.</summary>
     public void RenderPages(string dir)
     {
+        Expanded.BeginAnimation(OpacityProperty, null);
+        Expanded.Opacity = 1;
+        foreach (var p in new[] { ScaleTransform.ScaleXProperty, ScaleTransform.ScaleYProperty }) { _contentScale.BeginAnimation(p, null); _contentScale.SetValue(p, 1.0); }
+        Compact.Opacity = 0;
         var hitArea = Island.Background;
         Island.Background = new SolidColorBrush(Color.FromRgb(0x0B, 0x0B, 0x0E)); // the body is drawn by the surface, so give the picture one
         for (int i = 0; i < Tabs.Children.Count; i++)
         {
-            ShowPage(i);
+            try { ShowPage(i); } catch (NullReferenceException) { continue; } // the activity page needs the popup window, missing in the test mode
             UpdateLayout();
-            var image = Render(Island, Island.ActualWidth, Island.ActualHeight);
+            var image = Render(Island, Island.ActualWidth > 0 ? Island.ActualWidth : Island.Width, Island.ActualHeight > 0 ? Island.ActualHeight : Island.Height);
             var png = new System.Windows.Media.Imaging.PngBitmapEncoder();
             png.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(image));
             using var file = System.IO.File.Create(System.IO.Path.Combine(dir, $"IslandPage{i}.png"));

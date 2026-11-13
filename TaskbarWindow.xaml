@@ -22,7 +22,7 @@
 
         <!-- Center: start + apps -->
         <StackPanel x:Name="CenterPanel" Orientation="Horizontal" HorizontalAlignment="Center">
-            <Border x:Name="StartBtn" Width="46" Height="44" CornerRadius="2" Background="#01000000" Cursor="Hand"
+            <Border x:Name="StartBtn" Width="46" Height="40" CornerRadius="9" BorderThickness="1" BorderBrush="Transparent" Background="#01000000" Cursor="Hand"
                     MouseLeftButtonUp="Start_Click" MouseEnter="Hover_Enter" MouseLeave="Hover_Leave" ToolTip="Start">
                 <Grid x:Name="StartLogo" Width="20" Height="20">
                     <Grid.Resources>
