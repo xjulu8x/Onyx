@@ -569,7 +569,7 @@ public partial class SettingsWindow : Window
     private static Border PictureTile(Settings look, string label, bool chosen, bool small = false)
     {
         var image = new Image { Source = PixelPet.Sprite(look), Width = small ? 32 : 48, Height = small ? 40 : 60, Stretch = Stretch.Uniform };
-        RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
+        RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality); // shrunk tiles: averaging keeps the details
         var stack = new StackPanel();
         stack.Children.Add(image);
         stack.Children.Add(new TextBlock

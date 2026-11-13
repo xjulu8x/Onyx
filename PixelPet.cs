@@ -101,7 +101,7 @@ public sealed class PixelPet : FrameworkElement
 
     public bool Running { set { _wantRun = value; Apply(); } }
 
-    private double Fps => Compact ? 6 : 11;
+    private double Fps => Compact ? 12 : 24; // smooth motion; resting frames are skipped below
 
     private void Apply()
     {
@@ -197,6 +197,7 @@ public sealed class PixelPet : FrameworkElement
     private void Step()
     {
         _frame++;
+        double k = 11.0 / Fps; // all motion below is per 1/11 s, so it looks the same at any frame rate
         var s = Settings.Current;
         double p = Pixel;
         double floor = Math.Max(0, ActualWidth - W * p);
@@ -208,10 +209,10 @@ public sealed class PixelPet : FrameworkElement
         {
             // Dance: hops on loud beats, arms up in turn, notes and a pulsing aura.
             if (_act == Act.Sleep) Start(Act.Idle, 1);
-            _vel *= 0.6;
+            _vel *= Math.Pow(0.6, k);
             if (_hop <= 0 && level > 0.4) { _hopSpeed = 2.5 + level * 4; _armBeat++; }
-            if (On(0) && _frame % 7 == 0) Add("note", _x + _random.Next(4, 28) * p, head, (_random.NextDouble() - 0.5) * 0.6, -0.9, Settings.ToColor(s.PetColor2, 0xFF, Colors.White));
-            if (_frame % 30 == 0) _facing = -_facing;
+            if (On(0) && _frame % Frames(0.64) == 0) Add("note", _x + _random.Next(4, 28) * p, head, (_random.NextDouble() - 0.5) * 0.6, -0.9, Settings.ToColor(s.PetColor2, 0xFF, Colors.White));
+            if (_frame % Frames(2.7) == 0) _facing = -_facing;
         }
         else
         {
@@ -224,25 +225,25 @@ public sealed class PixelPet : FrameworkElement
                     double max = Math.Clamp(s.PetSpeed, 0.3, 2.5) * (Compact ? 0.9 : 1.8) * Math.Max(1, p / 3);
                     double d = _target - _x;
                     double want = Math.Sign(d) * Math.Min(max, Math.Abs(d) * 0.12 + 0.15);
-                    _vel += (want - _vel) * 0.3;
+                    _vel += (want - _vel) * (1 - Math.Pow(0.7, k));
                     if (Math.Abs(d) < 0.6 && Math.Abs(_vel) < 0.2) { _vel = 0; Start(Act.Idle, Frames(1 + _random.NextDouble() * 2)); }
                     if (s.PetBehavior != 0) Start(Act.Idle, 1);
                     break;
                 case Act.Look:
                     if (_left % Frames(0.9) == 0) _facing = -_facing; // looks left and right
-                    _vel *= 0.5;
+                    _vel *= Math.Pow(0.5, k);
                     break;
                 default:
-                    _vel *= 0.5;
+                    _vel *= Math.Pow(0.5, k);
                     break;
             }
         }
         if (Math.Abs(_vel) > 0.05)
         {
-            _x += _vel;
-            _stride += Math.Abs(_vel);
+            _x += _vel * k;
+            _stride += Math.Abs(_vel) * k;
             _facing = Math.Sign(_vel);
-            if (On(3) && !Compact && _hop <= 0 && (int)(_stride / (6 * p)) != (int)((_stride - Math.Abs(_vel)) / (6 * p)))
+            if (On(3) && !Compact && _hop <= 0 && (int)(_stride / (6 * p)) != (int)((_stride - Math.Abs(_vel) * k) / (6 * p)))
                 Add("dust", _x + (_facing > 0 ? 8 : W - 8) * p, ActualHeight - 3 * p, -_facing * 0.3, -0.2, Color.FromRgb(0x8A, 0x8A, 0x8A));
             if (On(6) && !Compact) _trail.Add((_x, 1));
         }
@@ -250,8 +251,8 @@ public sealed class PixelPet : FrameworkElement
         _target = Math.Clamp(_target, 0, floor);
 
         // Looks at the mouse when it comes close, unless asleep or busy walking.
-        if (_frame % 3 == 0) _watching = false;
-        if (_frame % 3 == 0 && !Sleeping && _act != Act.Walk && IsVisible && Native.GetCursorPos(out var cursor))
+        if (_frame % Frames(0.27) == 0) _watching = false;
+        if (_frame % Frames(0.27) == 0 && !Sleeping && _act != Act.Walk && IsVisible && Native.GetCursorPos(out var cursor))
         {
             var me = PointToScreen(new Point(_x + W * p / 2, ActualHeight - VisibleRows * p / 2));
             double dx = cursor.X - me.X, dy = cursor.Y - me.Y;
@@ -261,41 +262,42 @@ public sealed class PixelPet : FrameworkElement
         // Hop physics with squash on landing.
         if (_hopSpeed > 0 || _hop > 0)
         {
-            _hop += _hopSpeed;
-            _hopSpeed -= Compact ? 0.7 : 1.4;
+            _hop += _hopSpeed * k;
+            _hopSpeed -= (Compact ? 0.7 : 1.4) * k;
             if (_hop <= 0) { _hop = 0; _hopSpeed = 0; _squash = 0.84; }
         }
-        _squash += (1 - _squash) * 0.35;
+        _squash += (1 - _squash) * (1 - Math.Pow(0.65, k));
         if (_hop > 0) _squash = 1.05;
 
         if (!Sleeping && --_blink < -Frames(2.5) - _random.Next(Frames(4))) _blink = Compact ? 1 : 2;
-        _aura = music ? Math.Max(_aura * 0.85, level) : _aura * 0.9;
+        _aura = music ? Math.Max(_aura * Math.Pow(0.85, k), level) : _aura * Math.Pow(0.9, k);
 
         // Ambient effects.
         if (Sleeping && On(4) && _frame % Frames(1.3) == 0) Add("z", _x + (_facing > 0 ? 22 : 8) * p, head, 0.25, -0.5, Color.FromRgb(0xC8, 0xC8, 0xD0));
-        if (!Sleeping && On(2) && !Compact && _random.NextDouble() < 0.05) Add("spark", _x + _random.Next(-4, W + 4) * p, head + _random.Next(0, VisibleRows) * p, 0, 0, Color.FromRgb(0xFF, 0xE0, 0x8A));
-        if (On(8) && !Compact && _frame % 9 == 0 && (SystemMonitor.Instance.CpuTemp > 80 || SystemMonitor.Instance.Cpu > 85))
+        if (!Sleeping && On(2) && !Compact && _random.NextDouble() < 0.05 * k) Add("spark", _x + _random.Next(-4, W + 4) * p, head + _random.Next(0, VisibleRows) * p, 0, 0, Color.FromRgb(0xFF, 0xE0, 0x8A));
+        if (On(8) && !Compact && _frame % Frames(0.8) == 0 && (SystemMonitor.Instance.CpuTemp > 80 || SystemMonitor.Instance.Cpu > 85))
             Add("sweat", _x + (_facing > 0 ? 25 : 7) * p, head + 4 * p, _facing * 0.2, 0, Color.FromRgb(0x7F, 0xD0, 0xFF));
 
         foreach (var b in _bits)
         {
-            b.X += b.Vx; b.Y += b.Vy;
-            if (b.Kind is "confetti" or "sweat") b.Vy += 0.25;
-            if (b.Kind is "note" or "heart" or "z") b.X += Math.Sin(b.Life * 8) * 0.3;
+            b.X += b.Vx * k; b.Y += b.Vy * k;
+            if (b.Kind is "confetti" or "sweat") b.Vy += 0.25 * k;
+            if (b.Kind is "note" or "heart" or "z") b.X += Math.Sin(b.Life * 8) * 0.3 * k;
             b.Life -= (b.Kind switch { "spark" => 0.12, "dust" => 0.1, "confetti" => 0.035, _ => 0.045 }) * 11 / Fps;
         }
         _bits.RemoveAll(b => b.Life <= 0 || b.Y > ActualHeight + 4 || b.Y < -20);
-        for (int i = _trail.Count - 1; i >= 0; i--) { var t = _trail[i]; t.Life -= 0.08; if (t.Life <= 0) _trail.RemoveAt(i); else _trail[i] = t; }
+        for (int i = _trail.Count - 1; i >= 0; i--) { var t = _trail[i]; t.Life -= 0.08 * k; if (t.Life <= 0) _trail.RemoveAt(i); else _trail[i] = t; }
 
         // Redraw only when the picture changes, so resting costs next to nothing (most of all in the notch).
         _pose = CurrentPose(music && !Compact);
-        var look = (Math.Round(_x), Math.Round(_hop), _bits.Count, _facing, Math.Round(_squash, 2), _trail.Count, _pose, Sleeping ? _frame / Frames(1) : 0);
-        if (look == _lastLook && _bits.Count == 0) return;
+        var look = (Math.Round(_x * 2), Math.Round(_hop * 2), _bits.Count, _facing, Math.Round(_squash, 2), _trail.Count, _pose, Sleeping ? _frame / Frames(1) : 0);
+        if (Compact && look == _lastLook && _bits.Count == 0) return; // the big one keeps breathing
         _lastLook = look;
         InvalidateVisual();
     }
 
     private Pose _pose;
+    private double _sink;
     private (double, double, int, int, double, int, Pose, int) _lastLook;
 
     private Pose CurrentPose(bool dancing)
@@ -348,9 +350,12 @@ public sealed class PixelPet : FrameworkElement
         if (!Compact) dc.DrawRectangle(Frozen(Color.FromArgb(0x30, 255, 255, 255)), null, new Rect(_x + W * p / 2 - shadow, ActualHeight - 2, shadow * 2, Math.Max(1, p * 0.75)));
 
         var image = Sprite(s, _pose);
-        double sink = _pose.Sit ? 2 * p : 0; // sitting: the body rests lower, feet tucked away
-        double cx = _x + W * p / 2, bottom = ActualHeight - (Compact ? 0 : 1) - _hop + sink;
-        double breathe = Sleeping ? 1 + Math.Sin(_frame * 2.5 / Fps) * 0.03 : 1;
+        // Sitting down and getting up glide instead of jumping; walking bobs with each step; resting breathes.
+        _sink += ((_pose.Sit ? 2 * p : 0) - _sink) * 0.35;
+        double t = _frame / Fps;
+        double bob = Math.Abs(_vel) > 0.05 ? Math.Abs(Math.Sin(_stride / (3.5 * p) * Math.PI)) * p * 0.6 : 0;
+        double cx = _x + W * p / 2, bottom = ActualHeight - (Compact ? 0 : 1) - _hop + _sink - bob;
+        double breathe = 1 + Math.Sin(t * (Sleeping ? 1.6 : 2.4)) * (Sleeping ? 0.03 : 0.012);
         dc.PushTransform(new TranslateTransform(cx, bottom));
         dc.PushTransform(new ScaleTransform(_facing * (2 - _squash), _squash * breathe));
         dc.DrawImage(image, new Rect(-W * p / 2, -H * p, W * p, H * p));
@@ -397,6 +402,9 @@ public sealed class PixelPet : FrameworkElement
 
     private readonly record struct Pose(bool Step, bool Closed, bool ArmsUp, bool Open, int Wave, bool Sit);
 
+    /// <summary>Fine pixels per grid pixel: shapes, outline and shading are drawn at twice the grid, so curves stay round and detailed.</summary>
+    private const int S = 2;
+
     private static readonly Dictionary<string, BitmapSource> SpriteCache = new();
 
     /// <summary>The picture for this look and pose; built once and kept, so drawing a frame is just one image.</summary>
@@ -407,47 +415,52 @@ public sealed class PixelPet : FrameworkElement
         if (SpriteCache.TryGetValue(key, out var cached)) return cached;
         if (SpriteCache.Count > 300) SpriteCache.Clear();
         var grid = Build(s, pose);
-        var px = new byte[W * H * 4];
+        int fw = W * S, fh = H * S;
+        var px = new byte[fw * fh * 4];
         var body = Settings.ToColor(s.PetColor, 0xFF, Colors.White);
         var second = Settings.ToColor(s.PetColor2, 0xFF, Colors.Orange);
         var eye = Settings.ToColor(s.PetEyeColor, 0xFF, Colors.Black);
+        // Shadows lean a little toward blue and lights toward warm, like painted pixel art, instead of plain grey.
+        var cool = Color.FromRgb(0x10, 0x14, 0x2A);
+        var warm = Color.FromRgb(0xFF, 0xF6, 0xE0);
         Color Of(char ch) => ch switch
         {
-            'B' => body, 'L' => Mix(body, Colors.White, 0.35), 'l' => Mix(body, Colors.White, 0.65), 'S' => Mix(body, Colors.Black, 0.28), 's' => Mix(body, Colors.Black, 0.45),
-            'A' => second, 'a' => Mix(second, Colors.Black, 0.3), 'O' => Mix(body, Color.FromRgb(0x08, 0x08, 0x0C), 0.82),
-            'E' => eye, 'W' => Colors.White, 'K' => Color.FromArgb(0xC0, 0xFF, 0x8F, 0xA3), 'P' => Color.FromRgb(0xFF, 0x6B, 0x8A),
+            'B' => body, 'L' => Mix(body, warm, 0.3), 'l' => Mix(body, warm, 0.6), 'S' => Mix(body, cool, 0.26), 's' => Mix(body, cool, 0.46),
+            'A' => second, 'a' => Mix(second, cool, 0.28), 'b' => Mix(second, warm, 0.35),
+            'O' => Mix(body, Color.FromRgb(0x08, 0x08, 0x10), 0.84), 'o' => Mix(body, Color.FromRgb(0x08, 0x08, 0x10), 0.6),
+            'E' => eye, 'e' => Mix(eye, Colors.White, 0.25), 'W' => Colors.White, 'K' => Color.FromArgb(0xB0, 0xFF, 0x8F, 0xA3), 'P' => Color.FromRgb(0xFF, 0x6B, 0x8A),
             'V' => second, 'v' => Mix(second, Colors.White, 0.5), 'G' => Color.FromRgb(0xFF, 0xC9, 0x40), 'g' => Color.FromRgb(0xC9, 0x8A, 0x1E),
-            'R' => Color.FromRgb(0xFF, 0x45, 0x3A), 'J' => Color.FromRgb(0x4F, 0xD1, 0xC5), 'H' => second, 'h' => Mix(second, Colors.White, 0.4),
-            'D' => Color.FromRgb(0x2E, 0x2E, 0x36), 'd' => Color.FromRgb(0x55, 0x55, 0x60), 'U' => Color.FromRgb(0x8E, 0x5C, 0xFF), 'u' => Color.FromRgb(0x5E, 0x38, 0xC0),
+            'R' => Color.FromRgb(0xFF, 0x45, 0x3A), 'r' => Color.FromRgb(0xB8, 0x24, 0x22), 'J' => Color.FromRgb(0x4F, 0xD1, 0xC5), 'H' => second, 'h' => Mix(second, Colors.White, 0.4),
+            'D' => Color.FromRgb(0x2E, 0x2E, 0x36), 'd' => Color.FromRgb(0x5A, 0x5A, 0x66), 'U' => Color.FromRgb(0x8E, 0x5C, 0xFF), 'u' => Color.FromRgb(0x5E, 0x38, 0xC0),
             'Y' => Color.FromRgb(0xFF, 0xD6, 0x0A), 'F' => Colors.White, 'N' => Color.FromRgb(0xFF, 0x8A, 0x2A), 'n' => Color.FromRgb(0xD9, 0x66, 0x1A),
             _ => Colors.Transparent,
         };
-        for (int y = 0; y < H; y++)
-            for (int x = 0; x < W; x++)
+        for (int y = 0; y < fh; y++)
+            for (int x = 0; x < fw; x++)
             {
                 char ch = grid[y, x];
                 if (ch == '\0') continue;
                 var c = Of(ch);
-                int i = (y * W + x) * 4;
+                int i = (y * fw + x) * 4;
                 px[i] = (byte)(c.B * c.A / 255); px[i + 1] = (byte)(c.G * c.A / 255); px[i + 2] = (byte)(c.R * c.A / 255); px[i + 3] = c.A;
             }
-        var image = BitmapSource.Create(W, H, 96, 96, PixelFormats.Pbgra32, null, px, W * 4);
+        var image = BitmapSource.Create(fw, fh, 96, 96, PixelFormats.Pbgra32, null, px, fw * 4);
         image.Freeze();
         return SpriteCache[key] = image;
     }
 
     private static readonly Dictionary<string, int> TopCache = new();
 
-    /// <summary>First row of the standing sprite that holds a pixel (ears, hat). Rows above it are empty.</summary>
+    /// <summary>First grid row of the standing sprite that holds a pixel (ears, hat). Rows above it are empty.</summary>
     public static int ContentTop(Settings s)
     {
         string key = $"{s.PetShape}|{s.PetEars}|{s.PetHat}|{s.PetOutline}";
         if (TopCache.TryGetValue(key, out var top)) return top;
         var grid = Build(s, default);
         top = 0;
-        while (top < H - 1 && Enumerable.Range(0, W).All(x => grid[top, x] == '\0')) top++;
+        while (top < H * S - 1 && Enumerable.Range(0, W * S).All(x => grid[top, x] == '\0')) top++;
         // Arms up while dancing reach a little higher; keep one row for them.
-        return TopCache[key] = Math.Max(0, top - 1);
+        return TopCache[key] = Math.Max(0, top / S - 1);
     }
 
     private static Color Mix(Color a, Color b, double t) =>
@@ -457,16 +470,24 @@ public sealed class PixelPet : FrameworkElement
 
     private static char[,] Build(Settings s, Pose pose)
     {
-        var g = new char[H, W];
+        int FW = W * S, FH = H * S;
+        var g = new char[FH, FW];
         int shape = Math.Clamp(s.PetShape, 0, Shapes.Length - 1);
-        void Set(int x, int y, char c) { y += OY; if (x >= 0 && x < W && y >= 0 && y < H) g[y, x] = c; }
-        char Get(int x, int y) { y += OY; return x >= 0 && x < W && y >= 0 && y < H ? g[y, x] : '\0'; }
-        void Ellipse(double cx, double cy, double rx, double ry, char c, bool onlyFilled = false)
+        // Fine pixels (fx, fy) and grid units: grid x = (fx + 0.5) / S, grid y = (fy + 0.5) / S - OY.
+        void SetF(int fx, int fy, char c) { if (fx >= 0 && fx < FW && fy >= 0 && fy < FH) g[fy, fx] = c; }
+        char GetF(int fx, int fy) => fx >= 0 && fx < FW && fy >= 0 && fy < FH ? g[fy, fx] : '\0';
+        void Set(int x, int y, char c) { for (int dy = 0; dy < S; dy++) for (int dx = 0; dx < S; dx++) SetF(x * S + dx, (y + OY) * S + dy, c); }
+        char Get(int x, int y) => GetF(x * S, (y + OY) * S);
+        double GX(int fx) => (fx + 0.5) / S;
+        double GY(int fy) => (fy + 0.5) / S - OY;
+        void Fill(double x0, double y0, double x1, double y1, Func<double, double, bool> inside, char c)
         {
-            for (int y = (int)(cy - ry - 1); y <= cy + ry + 1; y++)
-                for (int x = (int)(cx - rx - 1); x <= cx + rx + 1; x++)
-                    if (Sq((x + 0.5 - cx) / rx) + Sq((y + 0.5 - cy) / ry) <= 1 && (!onlyFilled || Get(x, y) != '\0')) Set(x, y, c);
+            for (int fy = Math.Max(0, (int)((y0 + OY) * S) - 1); fy <= Math.Min(FH - 1, (int)((y1 + OY) * S) + 1); fy++)
+                for (int fx = Math.Max(0, (int)(x0 * S) - 1); fx <= Math.Min(FW - 1, (int)(x1 * S) + 1); fx++)
+                    if (inside(GX(fx), GY(fy))) SetF(fx, fy, c);
         }
+        void Ellipse(double ex, double ey2, double rx2, double ry2, char c) =>
+            Fill(ex - rx2, ey2 - ry2, ex + rx2, ey2 + ry2, (x, y) => Sq((x - ex) / rx2) + Sq((y - ey2) / ry2) <= 1, c);
         void Rect(int x0, int y0, int x1, int y1, char c) { for (int y = y0; y <= y1; y++) for (int x = x0; x <= x1; x++) Set(x, y, c); }
         void Mirror(int x, int y, char c) { Set(x, y, c); Set(W - 1 - x, y, c); }
 
@@ -484,172 +505,215 @@ public sealed class PixelPet : FrameworkElement
         switch (s.PetEars)
         {
             case 1: case 6:
-                int tall = s.PetEars == 6 ? 2 : 0;
-                for (int y = 0; y <= 8 + tall; y++)
-                {
-                    int half = (int)Math.Round(y * 0.55);
-                    for (int x = -half; x <= half; x++) { Mirror(9 + x, top - 6 - tall + y, 'B'); if (Math.Abs(x) < half - 1 && y > 3) Mirror(9 + x, top - 6 - tall + y, 'A'); }
-                }
+                // Pointed ears as real triangles, with a lighter inner ear.
+                double tall = s.PetEars == 6 ? 2.5 : 0, apex = top - 6 - tall, baseY = top + 2.5;
+                foreach (double ax in new[] { 9.5, 22.5 })
+                    Fill(ax - 6, apex, ax + 6, baseY, (x, y) =>
+                    {
+                        double t = (y - apex) / (baseY - apex);
+                        return t >= 0 && t <= 1 && Math.Abs(x - ax + (ax < 16 ? -t * 0.8 : t * 0.8)) <= t * 4.6;
+                    }, 'B');
+                foreach (double ax in new[] { 9.5, 22.5 })
+                    Fill(ax - 6, apex, ax + 6, baseY, (x, y) =>
+                    {
+                        double t = (y - apex) / (baseY - apex);
+                        return t >= 0.35 && t <= 1 && Math.Abs(x - ax + (ax < 16 ? -t * 0.8 : t * 0.8)) <= t * 4.6 - 1.6;
+                    }, 'A');
                 break;
             case 2:
-                for (int side = -1; side <= 1; side += 2) { Ellipse(16 + side * 5, top - 4, 2.6, 7, 'B'); Ellipse(16 + side * 5, top - 3, 1.2, 5, 'A'); }
+                for (int side = -1; side <= 1; side += 2) { Ellipse(16 + side * 5, top - 4, 2.7, 7.2, 'B'); Ellipse(16 + side * 5, top - 3.2, 1.3, 5, 'A'); }
                 break;
             case 3:
-                for (int side = -1; side <= 1; side += 2) { Ellipse(16 + side * 8.5, top + 1, 3.6, 3.6, 'B'); Ellipse(16 + side * 8.5, top + 1, 1.8, 1.8, 'A'); }
+                for (int side = -1; side <= 1; side += 2) { Ellipse(16 + side * 8.5, top + 1, 3.7, 3.7, 'B'); Ellipse(16 + side * 8.5, top + 1.3, 1.9, 1.9, 'A'); }
                 break;
             case 4:
-                for (int y = top - 6; y <= top; y++) Set(15, y, 'D');
-                Ellipse(15.5, top - 7, 2.2, 2.2, 'A');
-                Set(15, top - 8, 'l');
+                Fill(15, top - 7, 17, top, (x, y) => Math.Abs(x - 16) <= 0.5, 'D');
+                Ellipse(16, top - 7.5, 2.2, 2.2, 'A');
+                Ellipse(15.3, top - 8.2, 0.7, 0.7, 'v');
                 break;
             case 5:
-                for (int i = 0; i < 6; i++) { Mirror(9 - i / 2, top + 1 - i, i < 3 ? 'd' : 'L'); Mirror(10 - i / 2, top + 1 - i, i < 3 ? 'd' : 'L'); }
+                // Little curved horns.
+                foreach (int side in new[] { -1, 1 })
+                    Fill(0, top - 7, W, top + 2, (x, y) =>
+                    {
+                        double t = (top + 1.5 - y) / 7.5;
+                        double hx = 16 + side * (6.5 + t * 2.5 - t * t * 2);
+                        return t >= 0 && t <= 1 && Math.Abs(x - hx) <= 1.6 * (1 - t * 0.7);
+                    }, 'd');
                 break;
         }
 
         // Body.
-        for (int y = top - 1; y <= bottom + 1; y++)
-            for (int x = 0; x < W; x++)
-            {
-                double px = x + 0.5, py = y + 0.5;
-                bool inside = shape switch
-                {
-                    1 => px >= cx - rx && px <= cx + rx && py >= top && py <= bottom && !(Corner(px, py, cx - rx + 4, top + 4) || Corner(px, py, cx + rx - 4, top + 4) || Corner(px, py, cx - rx + 4, bottom - 4) || Corner(px, py, cx + rx - 4, bottom - 4)),
-                    3 => py <= 16 ? Sq((px - cx) / rx) + Sq((py - 16.5) / 11.5) <= 1 : px >= cx - rx && px <= cx + rx && py <= bottom - ((int)((px - 5) / 4) + pose.Wave) % 2 * 2,
-                    _ => Sq((px - cx) / rx) + Sq((py - cy) / ry) <= 1,
-                };
-                if (inside) Set(x, y, 'B');
-            }
+        Fill(0, top - 1, W, bottom + 1.5, (px, py) => shape switch
+        {
+            1 => px >= cx - rx && px <= cx + rx && py >= top && py <= bottom && !(Corner(px, py, cx - rx + 4, top + 4) || Corner(px, py, cx + rx - 4, top + 4) || Corner(px, py, cx - rx + 4, bottom - 4) || Corner(px, py, cx + rx - 4, bottom - 4)),
+            3 => py <= 16 ? Sq((px - cx) / rx) + Sq((py - 16.5) / 11.5) <= 1 : px >= cx - rx && px <= cx + rx && py <= bottom - 1.6 + 1.6 * Math.Cos((px - 5) * Math.PI / 4 + pose.Wave * Math.PI),
+            _ => Sq((px - cx) / rx) + Sq((py - cy) / ry) <= 1,
+        }, 'B');
         bool Corner(double px, double py, double ccx, double ccy) =>
-            Math.Abs(px - ccx) > 0 && Math.Abs(py - ccy) > 0 && ((px < ccx && ccx < cx) || (px > ccx && ccx > cx)) && ((py < ccy && ccy < cy) || (py > ccy && ccy > cy)) && Sq(px - ccx) + Sq(py - ccy) > 16;
+            ((px < ccx && ccx < cx) || (px > ccx && ccx > cx)) && ((py < ccy && ccy < cy) || (py > ccy && ccy > cy)) && Sq(px - ccx) + Sq(py - ccy) > 16;
 
         // Feet (walking lifts one) and little arms (up while dancing).
         if (shape != 3 && !pose.Sit)
         {
             char foot = s.PetMouth == 6 ? 'N' : 'B'; // a beak comes with orange feet, like a penguin
-            Ellipse(11, bottom + 1 - (pose.Step ? 1 : 0), 3, 1.7, foot);
-            Ellipse(21, bottom + 1 - (pose.Step ? 0 : 1), 3, 1.7, foot);
+            Ellipse(11, bottom + 1 - (pose.Step ? 0.8 : 0), 3.1, 1.7, foot);
+            Ellipse(21, bottom + 1 - (pose.Step ? 0 : 0.8), 3.1, 1.7, foot);
         }
         double armY = pose.ArmsUp ? cy - 4 : cy + 2;
-        Ellipse(cx - rx - 0.5, armY, 2, 1.6, 'B');
-        Ellipse(cx + rx + 0.5, pose.Open && !pose.ArmsUp ? cy - 4 : cy + 2, 2, 1.6, 'B');
+        Ellipse(cx - rx - 0.3, armY, 2.1, 1.6, 'B');
+        Ellipse(cx + rx + 0.3, pose.Open && !pose.ArmsUp ? cy - 4 : cy + 2, 2.1, 1.6, 'B');
 
-        // Light from the top left: highlights, shades and a darker rim at the bottom.
+        // Light from above: two light and two shade steps, dithered where they meet, and a darker rim at the bottom.
         var shaded = (char[,])g.Clone();
-        for (int y = 0; y < H; y++)
-            for (int x = 0; x < W; x++)
+        for (int fy = 0; fy < FH; fy++)
+            for (int fx = 0; fx < FW; fx++)
             {
-                if (g[y, x] != 'B') continue;
-                double nx = (x + 0.5 - cx) / rx, ny = (y - OY + 0.5 - cy) / ry;
-                double light = -0.3 * nx - 0.9 * ny; // light mostly from above: soft bands instead of a hard diagonal
-                bool edgeBelow = y + 1 >= H || g[y + 1, x] == '\0';
-                // Shading strength: flat (none), soft (one light and one shade step) or strong (two of each).
+                if (g[fy, fx] != 'B') continue;
+                double nx = (GX(fx) - cx) / rx, ny = (GY(fy) - cy) / ry;
+                double light = -0.3 * nx - 0.9 * ny;
+                bool checker = (fx + fy) % 2 == 0;
+                double Edge(double v, double at) => v - at + (checker ? 0.05 : -0.05); // dithering band around each step
                 char c = s.PetShading switch
                 {
                     0 => 'B',
-                    1 => light > 0.6 ? 'L' : light < -0.55 ? 'S' : 'B',
-                    _ => light > 0.95 ? 'l' : light > 0.45 ? 'L' : light < -0.75 ? 's' : light < -0.35 ? 'S' : 'B',
+                    1 => Edge(light, 0.6) > 0 ? 'L' : Edge(light, -0.55) < 0 ? 'S' : 'B',
+                    _ => Edge(light, 0.95) > 0 ? 'l' : Edge(light, 0.45) > 0 ? 'L' : Edge(light, -0.75) < 0 ? 's' : Edge(light, -0.35) < 0 ? 'S' : 'B',
                 };
-                if (edgeBelow && s.PetShading > 0) c = 'S';
-                shaded[y, x] = c;
+                bool edgeBelow = fy + 1 >= FH || g[fy + 1, fx] == '\0';
+                if (edgeBelow && s.PetShading > 0) c = 's';
+                shaded[fy, fx] = c;
             }
         g = shaded;
+        // A soft shine on the upper left of the body.
+        if (s.PetShading > 0 && shape != 1)
+            Fill(cx - rx * 0.7, cy - ry * 0.9, cx - rx * 0.1, cy - ry * 0.3, (x, y) => Sq((x - (cx - rx * 0.42)) / 1.6) + Sq((y - (cy - ry * 0.62)) / 0.9) <= 1 && GetF((int)(x * S), (int)((y + OY) * S)) != '\0', 'l');
 
         // Pattern in the second color, keeping the shading.
-        bool Body(int x, int y) => Get(x, y) is 'B' or 'L' or 'l' or 'S' or 's';
-        void Paint(int x, int y) { if (Body(x, y)) Set(x, y, Get(x, y) is 'S' or 's' ? 'a' : 'A'); }
+        bool BodyF(int fx, int fy) => GetF(fx, fy) is 'B' or 'L' or 'l' or 'S' or 's';
+        bool Body(int x, int y) => BodyF(x * S, (y + OY) * S);
+        void PaintF(int fx, int fy) { if (BodyF(fx, fy)) SetF(fx, fy, GetF(fx, fy) is 'S' or 's' ? 'a' : GetF(fx, fy) is 'l' ? 'b' : 'A'); }
+        void PaintWhere(Func<double, double, bool> inside)
+        {
+            for (int fy = 0; fy < FH; fy++) for (int fx = 0; fx < FW; fx++) if (inside(GX(fx), GY(fy))) PaintF(fx, fy);
+        }
         switch (s.PetPattern)
         {
-            case 1: for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) if (Sq((x + 0.5 - cx) / (rx * 0.45)) + Sq((y + 0.5 - (cy + ry * 0.68)) / (ry * 0.3)) <= 1) Paint(x, y); break;
-            case 2: for (int y = top; y <= bottom; y += 3) for (int x = 0; x < W; x++) if (Math.Abs(x + 0.5 - cx) > rx * 0.45) { Paint(x, y); } break;
-            case 3: foreach (var (sx, sy, r) in new[] { (9.0, cy + 3, 2.4), (22.0, cy - 4, 2.0), (20.0, cy + 6, 1.6), (12.0, top + 3.0, 1.4) }) for (int y = (int)(sy - r); y <= sy + r; y++) for (int x = (int)(sx - r); x <= sx + r; x++) if (Sq(x + 0.5 - sx) + Sq(y + 0.5 - sy) <= r * r) Paint(x, y); break;
-            case 4: for (int y = (int)(cy + 2); y <= bottom + 2; y++) for (int x = 0; x < W; x++) Paint(x, y); break;
-            case 5: foreach (var (sx, sy) in new[] { (9, (int)cy + 3), (22, (int)cy - 2), (13, top + 4), (20, (int)cy + 6) }) { Paint(sx, sy); Paint(sx - 1, sy); Paint(sx + 1, sy); Paint(sx, sy - 1); Paint(sx, sy + 1); } break;
+            case 1: PaintWhere((x, y) => Sq((x - cx) / (rx * 0.45)) + Sq((y - (cy + ry * 0.68)) / (ry * 0.3)) <= 1); break;
+            case 2: PaintWhere((x, y) => (int)Math.Floor(y - top) % 3 == 0 && Math.Abs(x - cx) > rx * 0.45 - Math.Sin(y) * 0.6); break;
+            case 3: PaintWhere((x, y) => new[] { (9.0, cy + 3, 2.4), (22.0, cy - 4, 2.0), (20.0, cy + 6, 1.6), (12.0, top + 3.0, 1.4) }.Any(sp => Sq(x - sp.Item1) + Sq(y - sp.Item2) <= sp.Item3 * sp.Item3)); break;
+            case 4: PaintWhere((x, y) => y > cy + 2 + Math.Sin(x * 1.2) * 0.5); break;
+            case 5: PaintWhere((x, y) => new[] { (9.0, cy + 3), (22.0, cy - 2), (13.0, top + 4.0), (20.0, cy + 6) }.Any(sp => (Math.Abs(x - sp.Item1) < 0.5 && Math.Abs(y - sp.Item2) < 1.6) || (Math.Abs(y - sp.Item2) < 0.5 && Math.Abs(x - sp.Item1) < 1.6))); break;
             case 6: // penguin mask: a heart-shaped face and a big belly in the second color
-                for (int y = top - 2; y <= bottom + 2; y++)
-                    for (int x = 0; x < W; x++)
-                    {
-                        double px = x + 0.5, py = y + 0.5;
-                        bool face = Sq(px - (cx - 4)) + Sq(py - eyeY) <= 4.8 * 4.8 || Sq(px - (cx + 4)) + Sq(py - eyeY) <= 4.8 * 4.8;
-                        bool belly = Sq((px - cx) / (rx * 0.66)) + Sq((py - (cy + ry * 0.38)) / (ry * 0.58)) <= 1;
-                        if ((face && py > eyeY - 4) || belly) Paint(x, y);
-                    }
+                PaintWhere((x, y) =>
+                {
+                    bool face = (Sq(x - (cx - 4)) + Sq(y - eyeY) <= 4.8 * 4.8 || Sq(x - (cx + 4)) + Sq(y - eyeY) <= 4.8 * 4.8) && y > eyeY - 4;
+                    bool belly = Sq((x - cx) / (rx * 0.66)) + Sq((y - (cy + ry * 0.38)) / (ry * 0.58)) <= 1;
+                    return face || belly;
+                });
                 break;
         }
 
-        // Face.
+        // Face: eyes with a glint, drawn on the fine grid.
         int e1 = shape == 2 ? 12 : 11, e2 = shape == 2 ? 20 : 21, ey = eyeY;
         void Eye(int ex)
         {
             if (pose.Closed && s.PetEyes != 4)
             {
-                Rect(ex - 2, ey + 1, ex + 1, ey + 1, 'E');
-                Set(ex - 2, ey, 'E'); Set(ex + 1, ey, 'E');
+                // A curved closed lid.
+                Fill(ex - 2.2, ey, ex + 2.2, ey + 2, (x, y) => Math.Abs(y - (ey + 1.6 - Sq(x - ex) * 0.12)) <= 0.5, 'E');
                 return;
             }
             switch (s.PetEyes)
             {
-                case 0: Rect(ex - 1, ey, ex, ey + 1, 'E'); Set(ex - 1, ey, 'W'); break;
-                case 2: Rect(ex - 2, ey, ex + 1, ey, 'S'); Rect(ex - 2, ey + 1, ex + 1, ey + 1, 'E'); Rect(ex - 1, ey + 2, ex, ey + 2, 'E'); break;
-                case 3: Set(ex - 2, ey + 1, 'E'); Set(ex - 1, ey, 'E'); Set(ex, ey, 'E'); Set(ex + 1, ey + 1, 'E'); break;
-                case 5: for (int i = -2; i <= 2; i++) { Set(ex + i, ey, 'Y'); Set(ex, ey + i, 'Y'); } Set(ex - 1, ey - 1, 'Y'); Set(ex + 1, ey + 1, 'Y'); Set(ex, ey, 'W'); break;
+                case 0:
+                    Ellipse(ex, ey + 1, 1.25, 1.5, 'E');
+                    SetF((int)((ex - 0.6) * S), (ey + OY + 0) * S + 1, 'W');
+                    break;
+                case 2:
+                    Fill(ex - 2.2, ey, ex + 2.2, ey + 3, (x, y) => Sq((x - ex) / 2.1) + Sq((y - (ey + 1.6)) / 1.4) <= 1 && y > ey + 0.9, 'E');
+                    Fill(ex - 2.4, ey, ex + 2.4, ey + 1, (x, y) => Math.Abs(y - (ey + 0.9)) <= 0.5 && Math.Abs(x - ex) <= 2.3, 'S');
+                    break;
+                case 3:
+                    Fill(ex - 2.5, ey - 1, ex + 2.5, ey + 2, (x, y) => Math.Abs(y - (ey + 0.2 + Sq(x - ex) * 0.22)) <= 0.5 && Math.Abs(x - ex) <= 2.1, 'E');
+                    break;
+                case 5:
+                    Fill(ex - 2.6, ey - 2.6, ex + 2.6, ey + 2.6, (x, y) => Math.Abs(x - ex) + Math.Abs(y - ey) * 0.9 <= 2.4 && (Math.Abs(x - ex) < 0.8 || Math.Abs(y - ey) < 0.8 || Math.Abs(x - ex) + Math.Abs(y - ey) <= 1.6), 'Y');
+                    Ellipse(ex, ey, 0.5, 0.5, 'W');
+                    break;
                 default:
-                    Rect(ex - 2, ey - 2, ex + 1, ey + 2, 'E');
-                    Rect(ex - 2, ey - 2, ex - 1, ey - 1, 'W');
-                    Set(ex + 1, ey + 2, 'W');
+                    // Big round eyes: dark with a lighter lower half, a large glint top left and a small one bottom right.
+                    Ellipse(ex - 0.5, ey, 2.25, 2.7, 'E');
+                    Fill(ex - 3, ey, ex + 2, ey + 3, (x, y) => Sq((x - (ex - 0.5)) / 1.6) + Sq((y - (ey + 1.3)) / 1.1) <= 1, 'e');
+                    Ellipse(ex - 1.3, ey - 1.1, 0.9, 0.9, 'W');
+                    SetF((int)((ex + 0.6) * S), (int)((ey + 1.3 + OY) * S), 'W');
                     break;
             }
         }
         if (s.PetEyes == 4)
         {
-            Rect(7, ey - 2, 25, ey + 1, 'V');
-            Rect(8, ey - 2, 24, ey - 2, 'v');
-            if (pose.Closed) Rect(8, ey, 24, ey, 'a'); else { Set(10, ey - 1, 'W'); Set(11, ey - 1, 'W'); Set(10, ey, 'W'); }
+            Fill(7, ey - 2, 25, ey + 2, (x, y) => x >= 7.2 && x <= 24.8 && y >= ey - 2 && y <= ey + 1.6 && !(Sq(x - 16) < 0.3 && y > ey + 0.8), 'V');
+            Fill(8, ey - 2, 24, ey - 1, (x, y) => y < ey - 1.3 && x > 8 && x < 24, 'v');
+            if (pose.Closed) Rect(8, ey, 24, ey, 'a');
+            else { Ellipse(10.5, ey - 0.8, 1, 0.6, 'W'); Ellipse(12.5, ey - 0.8, 0.4, 0.4, 'W'); }
         }
         else { Eye(e1); Eye(e2); }
 
-        int my = ey + (s.PetEyes == 4 ? 4 : 5);
-        int mouth = pose.Open && s.PetMouth != 0 ? 4 : s.PetMouth;
+        // Mouth on the fine grid: soft curves instead of steps.
+        double my = ey + (s.PetEyes == 4 ? 4 : 5);
+        int mouth = pose.Open && s.PetMouth != 0 && s.PetMouth != 6 ? 4 : s.PetMouth;
+        double mx = 16.5;
         switch (mouth)
         {
             case 1: case 3: case 5:
-                Set(14, my, 'E'); Rect(15, my + 1, 17, my + 1, 'E'); Set(18, my, 'E');
-                if (mouth == 3) { Set(15, my + 2, 'W'); Set(17, my + 2, 'W'); }
-                if (mouth == 5) { Set(16, my + 2, 'P'); Set(17, my + 2, 'P'); Set(16, my + 3, 'P'); }
+                Fill(mx - 3, my - 1, mx + 3, my + 2, (x, y) => Math.Abs(y - (my + 1.1 - Sq(x - mx) * 0.13)) <= 0.45 && Math.Abs(x - mx) <= 2.3, 'E');
+                if (mouth == 3) { Ellipse(mx - 1, my + 1.9, 0.45, 0.6, 'W'); Ellipse(mx + 1, my + 1.9, 0.45, 0.6, 'W'); }
+                if (mouth == 5) Ellipse(mx + 0.4, my + 2.1, 0.9, 1, 'P');
                 break;
-            case 2: Set(14, my, 'E'); Set(15, my + 1, 'E'); Set(16, my, 'E'); Set(17, my + 1, 'E'); Set(18, my, 'E'); break;
-            case 4: Rect(15, my, 17, my + 2, 'E'); Set(16, my + 1, 'P'); break;
-            case 6: Rect(13, ey + 2, 18, ey + 2, 'N'); Rect(14, ey + 3, 17, ey + 3, 'n'); break;
+            case 2:
+                Fill(mx - 3, my - 1, mx + 3, my + 2, (x, y) => Math.Abs(y - (my + 0.9 - Math.Abs(Math.Sin((x - mx) * 1.35)) * 0.8)) <= 0.45 && Math.Abs(x - mx) <= 2.4, 'E');
+                break;
+            case 4:
+                Ellipse(mx, my + 1, 1.5, 1.6, 'E');
+                Ellipse(mx, my + 1.6, 0.9, 0.7, 'P');
+                break;
+            case 6:
+                // Beak: lighter top, darker underside.
+                Fill(13, ey + 1.5, 20, ey + 4.5, (x, y) => Math.Abs(x - mx) <= 2.8 - (y - (ey + 1.8)) * 0.9 && y >= ey + 1.8 && y <= ey + 4.3, 'N');
+                Fill(13, ey + 3, 20, ey + 4.5, (x, y) => Math.Abs(x - mx) <= 2.8 - (y - (ey + 1.8)) * 0.9 && y >= ey + 3.2 && y <= ey + 4.3, 'n');
+                break;
         }
-        if (s.PetCheeks) { Rect(e1 - 4, my - 1, e1 - 2, my - 1, 'K'); Rect(e2 + 2, my - 1, e2 + 4, my - 1, 'K'); }
+        if (s.PetCheeks) { Ellipse(e1 - 2.8, my, 1.6, 0.8, 'K'); Ellipse(e2 + 2.8, my, 1.6, 0.8, 'K'); }
 
         // Accessories around the face and neck.
-        int neck = my + 3;
+        int neck = (int)my + 3;
         switch (s.PetAccessory)
         {
-            case 1: // glasses: two frames and a bridge
+            case 1: // round glasses and a bridge
+                foreach (int ex in new[] { e1, e2 })
+                    Fill(ex - 4, ey - 4, ex + 4, ey + 4, (x, y) => { double d = Math.Sqrt(Sq(x - (ex - 0.5)) + Sq(y - ey)); return d <= 3.3 && d >= 2.6; }, 'D');
+                Fill(e1 + 2, ey - 1, e2 - 3, ey, (x, y) => Math.Abs(y - (ey - 0.6)) <= 0.4 && x > e1 + 2.6 && x < e2 - 3.4, 'D');
+                break;
+            case 2: // sunglasses with a shine
                 foreach (int ex in new[] { e1, e2 })
                 {
-                    Rect(ex - 3, ey - 3, ex + 2, ey - 3, 'D'); Rect(ex - 3, ey + 3, ex + 2, ey + 3, 'D');
-                    Rect(ex - 3, ey - 3, ex - 3, ey + 3, 'D'); Rect(ex + 2, ey - 3, ex + 2, ey + 3, 'D');
+                    Fill(ex - 4, ey - 3, ex + 3, ey + 3, (x, y) => Sq((x - (ex - 0.5)) / 2.9) + Sq((y - ey) / 2.3) <= 1, 'D');
+                    Fill(ex - 3, ey - 2, ex, ey, (x, y) => Math.Abs((x - ex) + (y - ey) + 1.5) <= 0.4 && Sq((x - (ex - 0.5)) / 2.4) + Sq((y - ey) / 1.9) <= 1, 'd');
                 }
-                Rect(e1 + 3, ey - 1, e2 - 4, ey - 1, 'D');
+                Fill(e1 + 2, ey - 1, e2 - 3, ey, (x, y) => Math.Abs(y - (ey - 0.6)) <= 0.4, 'D');
                 break;
-            case 2: // sunglasses
-                foreach (int ex in new[] { e1, e2 }) { Rect(ex - 3, ey - 2, ex + 2, ey + 2, 'D'); Set(ex - 2, ey - 1, 'd'); Set(ex - 1, ey - 1, 'd'); }
-                Rect(e1 + 3, ey - 1, e2 - 4, ey - 1, 'D');
+            case 3: // knitted scarf with a hanging end
+                for (int fy = (neck + OY) * S; fy < (neck + 2 + OY) * S; fy++) for (int fx = 0; fx < FW; fx++) if (BodyF(fx, fy) || GetF(fx, fy) is 'A' or 'a') SetF(fx, fy, (fx / 2 + fy / 2) % 3 == 0 ? 'r' : 'R');
+                Rect(20, neck + 2, 22, neck + 6, 'R'); Rect(20, neck + 4, 22, neck + 4, 'F'); Fill(20, neck + 6, 23, neck + 7, (x, y) => (int)(x * 2) % 2 == 0, 'R');
                 break;
-            case 3: // scarf with a hanging end
-                for (int x = 0; x < W; x++) for (int y = neck; y <= neck + 1; y++) if (Body(x, y)) Set(x, y, (x + y) % 4 == 0 ? 'F' : 'R');
-                Rect(20, neck + 2, 22, neck + 6, 'R'); Rect(20, neck + 4, 22, neck + 4, 'F');
-                break;
-            case 4: // bow tie
-                foreach (var (dx, dy) in new[] { (0, 0), (-1, -1), (-1, 0), (-1, 1), (-2, -1), (-2, 0), (-2, 1), (-3, -2), (-3, -1), (-3, 0), (-3, 1), (-3, 2), (1, -1), (1, 0), (1, 1), (2, -1), (2, 0), (2, 1), (3, -2), (3, -1), (3, 0), (3, 1), (3, 2) })
-                    Set(16 + dx, neck + 1 + dy, dx == 0 ? 'D' : 'R');
+            case 4: // bow tie with a knot
+                Fill(12, neck - 2, 21, neck + 4, (x, y) => { double dx = Math.Abs(x - 16.5), dy = Math.Abs(y - (neck + 1.5)); return dx <= 4 && dy <= 0.6 + dx * 0.45; }, 'R');
+                Fill(12, neck - 2, 21, neck + 4, (x, y) => { double dx = Math.Abs(x - 16.5), dy = Math.Abs(y - (neck + 1.5)); return dx > 2 && dx <= 4 && dy <= 0.6 + dx * 0.45 && y > neck + 1.5; }, 'r');
+                Ellipse(16.5, neck + 1.5, 0.9, 0.9, 'D');
                 break;
             case 5: // collar with a bell
-                for (int x = 0; x < W; x++) if (Body(x, neck)) Set(x, neck, 'R');
-                Rect(15, neck + 1, 17, neck + 2, 'G'); Set(15, neck + 1, 'Y'); Set(16, neck + 3, 'g');
+                for (int fy = (neck + OY) * S; fy < (neck + 1 + OY) * S; fy++) for (int fx = 0; fx < FW; fx++) if (BodyF(fx, fy) || GetF(fx, fy) is 'A' or 'a') SetF(fx, fy, 'R');
+                Ellipse(16.5, neck + 2, 1.6, 1.6, 'G'); Ellipse(16, neck + 1.5, 0.5, 0.5, 'Y'); Fill(15, neck + 2.6, 18, neck + 3.4, (x, y) => Math.Abs(x - 16.5) < 0.5, 'g');
                 break;
         }
 
@@ -657,53 +721,68 @@ public sealed class PixelPet : FrameworkElement
         switch (s.PetHat)
         {
             case 1: // cap with brim
-                for (int r = 0; r < 4; r++) { int half = 4 + r * 2; Rect(16 - half, top - 4 + r, 15 + half - (r == 3 ? 0 : 0), top - 4 + r, 'H'); }
-                Rect(24, top - 1, 29, top - 1, 'H'); Rect(12, top - 3, 14, top - 3, 'h'); Set(16, top - 5, 'h');
+                Fill(7, top - 5, 26, top, (x, y) => Sq((x - 16) / 8.6) + Sq((y - top) / 4.6) <= 1 && y <= top - 0.2, 'H');
+                Fill(22, top - 1.2, 30, top + 0.2, (x, y) => y >= top - 1.1 && y <= top - 0.1 && x <= 29.5 - (top - y) * 0.5, 'H');
+                Fill(9, top - 4, 15, top - 2, (x, y) => Sq((x - 12) / 2.2) + Sq((y - (top - 3)) / 0.8) <= 1, 'h');
+                Ellipse(16, top - 4.8, 0.7, 0.5, 'h');
                 break;
             case 2: // crown with jewels
-                Rect(9, top - 3, 22, top - 1, 'G'); Rect(9, top - 1, 22, top - 1, 'g');
-                foreach (var (x, h) in new[] { (9, 2), (12, 3), (15, 4), (16, 4), (19, 3), (22, 2) }) for (int i = 1; i <= h; i++) Set(x, top - 3 - i, 'G');
-                Set(12, top - 2, 'R'); Set(19, top - 2, 'R'); Set(15, top - 2, 'J'); Set(16, top - 2, 'J'); Set(15, top - 7, 'W');
+                Fill(9, top - 7, 23, top, (x, y) =>
+                {
+                    if (x < 9 || x > 23 || y > top - 0.2) return false;
+                    if (y >= top - 3) return true;
+                    double phase = (x - 9) / 14 * 4; // four points
+                    double peak = Math.Abs(phase - Math.Round(phase));
+                    return y >= top - 3 - (1 - peak * 2) * 3.6;
+                }, 'G');
+                Fill(9, top - 1, 23, top, (x, y) => y > top - 1 && x >= 9 && x <= 23, 'g');
+                Ellipse(12.5, top - 2, 0.8, 0.8, 'R'); Ellipse(19.5, top - 2, 0.8, 0.8, 'R'); Ellipse(16, top - 2, 1, 1, 'J');
                 break;
-            case 3: // headphones
-                for (int x = 0; x < W; x++)
-                    for (int y = top - 5; y < ey - 2; y++)
-                    {
-                        double d = Math.Sqrt(Sq((x + 0.5 - 16) / 13.5) + Sq((y + 0.5 - (ey + 1)) / (ey + 1 - top + 5)));
-                        if (d > 0.93 && d <= 1.02) Set(x, y, 'D');
-                    }
-                Rect(1, ey - 3, 4, ey + 3, 'D'); Rect(27, ey - 3, 30, ey + 3, 'D'); Rect(2, ey - 2, 3, ey + 2, 'H'); Rect(28, ey - 2, 29, ey + 2, 'H');
+            case 3: // headphones with a padded band
+                Fill(0, top - 6, W, ey - 2, (x, y) => { double d = Math.Sqrt(Sq((x - 16) / 13.5) + Sq((y - (ey + 1)) / (ey + 1 - top + 5))); return d > 0.92 && d <= 1.02; }, 'D');
+                Fill(0, ey - 4, 5, ey + 4, (x, y) => Sq((x - 2.6) / 2) + Sq((y - ey) / 3.6) <= 1, 'D');
+                Fill(27, ey - 4, W, ey + 4, (x, y) => Sq((x - 29.4) / 2) + Sq((y - ey) / 3.6) <= 1, 'D');
+                Fill(0, ey - 3, 5, ey + 3, (x, y) => Sq((x - 2.8) / 1) + Sq((y - ey) / 2.6) <= 1, 'H');
+                Fill(27, ey - 3, W, ey + 3, (x, y) => Sq((x - 29.2) / 1) + Sq((y - ey) / 2.6) <= 1, 'H');
                 break;
-            case 4: // beanie with pom-pom
-                for (int r = 0; r < 6; r++) { int half = 5 + Math.Min(r, 3) * 2; Rect(16 - half, top - 5 + r, 15 + half, top - 5 + r, r >= 4 ? 'h' : r % 2 == 0 ? 'H' : 'F'); }
-                Ellipse(16, top - 7, 2.3, 2.3, 'F');
+            case 4: // knitted beanie with a pom-pom
+                Fill(6, top - 6, 26, top + 1.5, (x, y) => Sq((x - 16) / 9.2) + Sq((y - (top + 1)) / 6.6) <= 1 && y <= top + 1.3, 'H');
+                Fill(6, top - 1, 26, top + 1.5, (x, y) => y > top - 0.6 && y <= top + 1.3 && Math.Abs(x - 16) <= 9.4, 'h');
+                Fill(6, top - 6, 26, top, (x, y) => (int)Math.Floor(x * 2) % 3 == 0 && y < top - 0.6 && Sq((x - 16) / 9.2) + Sq((y - (top + 1)) / 6.6) <= 1, 'b');
+                Ellipse(16, top - 6.6, 2.4, 2.2, 'F');
                 break;
             case 5: // halo
-                for (int x = 0; x < W; x++) for (int y = top - 8; y < top - 2; y++) { double d = Sq((x + 0.5 - 16) / 7.5) + Sq((y + 0.5 - (top - 5)) / 1.9); if (d <= 1 && d > 0.35) Set(x, y, 'G'); }
+                Fill(7, top - 8, 25, top - 2, (x, y) => { double d = Sq((x - 16) / 7.5) + Sq((y - (top - 5)) / 1.9); return d <= 1 && d > 0.38; }, 'G');
+                Fill(7, top - 8, 25, top - 2, (x, y) => { double d = Sq((x - 16) / 7.5) + Sq((y - (top - 5)) / 1.9); return d <= 1 && d > 0.38 && y < top - 5.6; }, 'Y');
                 break;
             case 6: // flower
-                foreach (var (dx, dy) in new[] { (0, -2), (0, 2), (-2, 0), (2, 0), (-1, -1), (1, -1), (-1, 1), (1, 1) }) Set(23 + dx, top - 1 + dy, 'P');
-                Set(23, top - 1, 'Y'); Set(21, top + 2, 'L');
+                foreach (var (dx, dy) in new[] { (0.0, -1.8), (0.0, 1.8), (-1.8, 0.0), (1.8, 0.0), (-1.3, -1.3), (1.3, -1.3), (-1.3, 1.3), (1.3, 1.3) }) Ellipse(23 + dx, top - 1 + dy, 1.1, 1.1, 'P');
+                Ellipse(23, top - 1, 1, 1, 'Y'); Ellipse(20.6, top + 1.5, 1.4, 0.6, 'L');
                 break;
             case 7: // bow
-                foreach (var (dx, dy) in new[] { (0, 0), (-1, -1), (-2, -1), (-3, -2), (-3, -1), (-3, 0), (-2, 0), (-1, 0), (1, -1), (2, -1), (3, -2), (3, -1), (3, 0), (2, 0), (1, 0), (-2, 1), (2, 1) }) Set(22 + dx, top + dy, dx == 0 ? 'R' : 'P');
+                Fill(17, top - 3, 28, top + 2, (x, y) => { double dx = Math.Abs(x - 22.5), dy = Math.Abs(y - (top - 0.5)); return dx <= 4.2 && dy <= 0.7 + dx * 0.55; }, 'P');
+                Fill(17, top - 3, 28, top + 2, (x, y) => { double dx = Math.Abs(x - 22.5), dy = Math.Abs(y - (top - 0.5)); return dx > 2.5 && dx <= 4.2 && dy <= 0.7 + dx * 0.55 && y > top - 0.5; }, 'r');
+                Ellipse(22.5, top - 0.5, 1, 1, 'R');
                 break;
             case 8: // wizard hat with a star
-                for (int r = 0; r <= 10; r++) { int half = r / 2 + 1; Rect(18 - half - r / 4, top - 11 + r, 18 + half - r / 4, top - 11 + r, r % 4 == 3 ? 'u' : 'U'); }
-                Rect(6, top - 1, 25, top - 1, 'u'); Set(16, top - 5, 'Y'); Set(15, top - 5, 'Y'); Set(17, top - 5, 'Y'); Set(16, top - 6, 'Y'); Set(16, top - 4, 'Y');
+                Fill(8, top - 12, 26, top, (x, y) => { double t = (y - (top - 11.5)) / 11; double hx = 18 - t * 2 + Math.Sin(t * 3) * 0.6; return t >= 0 && t <= 1 && Math.Abs(x - hx) <= 0.5 + t * 6; }, 'U');
+                Fill(8, top - 12, 26, top, (x, y) => { double t = (y - (top - 11.5)) / 11; double hx = 18 - t * 2 + Math.Sin(t * 3) * 0.6; return t >= 0.2 && t <= 1 && x - hx > t * 3 && x - hx <= 0.5 + t * 6; }, 'u');
+                Fill(5, top - 1.5, 27, top + 0.5, (x, y) => Sq((x - 16) / 10.5) + Sq((y - (top - 0.4)) / 1.1) <= 1, 'u');
+                Fill(13, top - 7, 19, top - 2, (x, y) => Math.Abs(x - 16) + Math.Abs(y - (top - 4.5)) * 0.9 <= 1.9 && (Math.Abs(x - 16) < 0.6 || Math.Abs(y - (top - 4.5)) < 0.6 || Math.Abs(x - 16) + Math.Abs(y - (top - 4.5)) < 1.2), 'Y');
                 break;
         }
 
-        // Dark outline around everything, the classic pixel art edge.
+        // Outline one fine pixel wide: darker where the shape is in shade, a bit softer on the lit top edge.
         if (s.PetOutline)
         {
             var outlined = (char[,])g.Clone();
-            for (int y = 0; y < H; y++)
-                for (int x = 0; x < W; x++)
+            for (int fy = 0; fy < FH; fy++)
+                for (int fx = 0; fx < FW; fx++)
                 {
-                    if (g[y, x] != '\0') continue;
-                    bool near = (x > 0 && g[y, x - 1] != '\0') || (x < W - 1 && g[y, x + 1] != '\0') || (y > 0 && g[y - 1, x] != '\0') || (y < H - 1 && g[y + 1, x] != '\0');
-                    if (near) outlined[y, x] = 'O';
+                    if (g[fy, fx] != '\0') continue;
+                    bool below = fy < FH - 1 && g[fy + 1, fx] != '\0';
+                    bool near = below || (fx > 0 && g[fy, fx - 1] != '\0') || (fx < FW - 1 && g[fy, fx + 1] != '\0') || (fy > 0 && g[fy - 1, fx] != '\0');
+                    if (near) outlined[fy, fx] = below && !(fy > 0 && g[fy - 1, fx] != '\0') && GY(fy) < cy - ry * 0.4 ? 'o' : 'O';
                 }
             g = outlined;
         }
