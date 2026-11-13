@@ -94,6 +94,11 @@ public class Settings
     public double PetSpeed { get; set; } = 1;
     public bool PetInNotch { get; set; } = true; // shown in the small island while no music plays
     public int PetAccessory { get; set; } // PixelPet.Accessories
+
+    // Friends cards (2.7). Keys stay on this PC, in this settings file.
+    public string SteamKey { get; set; } = "";
+    public string SteamId { get; set; } = "";
+    public string DiscordToken { get; set; } = "";
     public int PetShading { get; set; } = 2; // 0 flat, 1 soft, 2 strong
     public double? VibranceLevel { get; set; } // saturation chosen in Onyx; null = leave the driver alone
     public bool CrosshairOn { get; set; }

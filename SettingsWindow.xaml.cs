@@ -206,6 +206,7 @@ public partial class SettingsWindow : Window
     private void ActionRow(StackPanel into, string label, string hint, string button, Action click, bool accent = false)
     {
         var row = Line(label, hint);
+        ((FrameworkElement)row.Children[0]).Margin = new Thickness(0, 6, 150, 6); // long hints wrap before the key
         row.Children.Add(Action(button, click, accent));
         into.Children.Add(row);
     }
@@ -274,63 +275,127 @@ public partial class SettingsWindow : Window
         Slider(size, "Deckkraft", 0.4, 1, () => _s.IslandOpacity, v => { _s.IslandOpacity = Math.Round(v, 2); island.ApplyLook(); }, v => $"{v * 100:0} %");
     }
 
+    private static int _widgetTab;
+
     private void Widgets()
     {
-        var look = Section("Aussehen");
-        Pick(look, "Farbe", WidgetColorNames, Array.IndexOf(WidgetColors, _s.WidgetColor), i => { _s.WidgetColor = WidgetColors[i]; App.ApplyWidgetLook(); });
-        Pick(look, "CPU und RAM", new[] { "Linie", "Balken", "Ringe" }, _s.WidgetGraph, i => _s.WidgetGraph = i);
-
-
-        var cards = Section("Karten");
-        foreach (var (key, label, hint) in new[]
+        // Categories as tabs, so the page shows only what belongs together.
+        var tabs = new[] { "Allgemein", "System", "Zeit & Wetter", "Musik & Spaß", "Freunde" };
+        var bar = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
+        for (int i = 0; i < tabs.Length; i++)
         {
-            ("Stats", "System", "Netz, GPU, CPU, RAM und Laufwerke."), ("Temp", "CPU-Temperatur", null),
-            ("Music", "Musik", "Cover, Tasten und Pegel."), ("Terminal", "Terminal", "fetch, cava, life, orb und rain."), ("Bonsai", "Bonsai", "Wächst, will gegossen werden."),
-            ("Weather", "Wetter", "Von Open-Meteo, braucht einen Ort."), ("Clock", "Uhr", null), ("Calendar", "Kalender", null),
-            ("Signal", "Signal", "Augen, Puls oder Uhr in Punkten."), ("Koi", "Koi-Teich", "Klick ins Wasser macht Wellen."),
-        })
-            Switch(cards, label, _s.CardOn(key), v =>
-            {
-                _s.Cards[key] = v;
-                if (v && key == "Stats") foreach (var part in _s.Cards.Keys.Where(k => k.StartsWith("Stats-")).ToList()) _s.Cards.Remove(part); // also its single parts
-                App.ApplyWidgetVisibility();
-            }, hint);
+            int index = i;
+            var chip = Chip($"{i + 1} {tabs[i]}", i == _widgetTab);
+            chip.MouseLeftButtonUp += (_, _) => { _widgetTab = index; Reload(); };
+            bar.Children.Add(chip);
+        }
+        Page.Children.Add(bar);
 
-        var weather = Section("Wetter");
-        var place = Line("Ort", "Nur dieser Name geht an Open-Meteo, um das Wetter zu finden.");
-        place.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(190) });
-        place.ColumnDefinitions.Add(new ColumnDefinition());
-        place.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var city = new TextBox
+        void Cards(string title, params (string Key, string Label, string Hint)[] list)
         {
-            Text = _s.WeatherCity, FontFamily = Theme.Mono, FontSize = 12, Foreground = Brushes.White, CaretBrush = Brushes.White, BorderThickness = new Thickness(0), Padding = new Thickness(8, 6, 8, 6),
-            Background = Brushes.Transparent, VerticalContentAlignment = VerticalAlignment.Center,
-        };
-        var cityField = new Border { Background = Field, BorderBrush = Theme.Res("LineHi"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(2), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0), Child = city };
-        var use = Action("Übernehmen", () =>
+            var section = Section(title);
+            foreach (var (key, label, hint) in list)
+                Switch(section, label, _s.CardOn(key), v =>
+                {
+                    _s.Cards[key] = v;
+                    if (v && key == "Stats") foreach (var part in _s.Cards.Keys.Where(k => k.StartsWith("Stats-")).ToList()) _s.Cards.Remove(part); // also its single parts
+                    App.ApplyWidgetVisibility();
+                }, hint);
+        }
+
+        switch (_widgetTab)
         {
-            _s.WeatherCity = city.Text.Trim();
-            _s.WeatherPlace = null;
-            _s.Save();
-            App.Widget<WeatherCard>()?.Refresh();
-        });
-        Grid.SetColumn(cityField, 1);
+            case 0:
+                var look = Section("Aussehen");
+                Pick(look, "Farbe", WidgetColorNames, Array.IndexOf(WidgetColors, _s.WidgetColor), i => { _s.WidgetColor = WidgetColors[i]; App.ApplyWidgetLook(); });
+                Slider(look, "Größe", 0.7, 1.3, () => _s.WidgetScale, v => { _s.WidgetScale = Math.Round(v, 2); App.ApplyWidgetLook(); }, v => $"{v * 100:0} %");
+                Slider(look, "Deckkraft", 0.3, 1, () => _s.WidgetOpacity, v => { _s.WidgetOpacity = Math.Round(v, 2); App.ApplyWidgetLook(); }, v => $"{v * 100:0} %");
+                var layout = Section("Anordnung");
+                ActionRow(layout, "Widgets verschieben", "Ziehen, Größe am Griff unten rechts ändern, mit × entfernen. Auch über den Hubbel an der Island.", WidgetMover.Editing ? "Fertig" : "Anordnen", () =>
+                {
+                    if (!_s.ShowWidgets) { _s.ShowWidgets = true; _s.Save(); App.ApplyWidgetVisibility(); }
+                    WidgetMover.SetEditing(!WidgetMover.Editing);
+                    Reload();
+                }, accent: WidgetMover.Editing);
+                ActionRow(layout, "Eigene Größen zurücksetzen", "Alle Widgets wieder in normaler Größe.", "Zurücksetzen", () => { _s.WidgetScales.Clear(); _s.Save(); App.ApplyWidgetLook(); });
+                break;
+
+            case 1:
+                Cards("System", ("Stats", "System", "Netz, GPU, CPU, RAM und Laufwerke."), ("Temp", "CPU-Temperatur", null), ("Signal", "Signal", "Augen, Puls oder Uhr in Punkten, dazu Live-Werte."));
+                var sys = Section("Darstellung");
+                Pick(sys, "CPU und RAM", new[] { "Linie", "Balken", "Ringe" }, _s.WidgetGraph, i => _s.WidgetGraph = i);
+                Pick(sys, "Aufteilung", new[] { "Ein Block", "Einzeln" }, _s.WidgetsFree ? 1 : 0, i => { _s.WidgetsFree = i == 1; App.ApplyWidgetLayout(); });
+                break;
+
+            case 2:
+                Cards("Zeit", ("Clock", "Uhr", "Analog mit roter Sekunde."), ("Calendar", "Kalender", "Monat zum Blättern."), ("Weather", "Wetter", "Von Open-Meteo, braucht einen Ort."));
+                var weather = Section("Wetter");
+                TextSetting(weather, "Ort", "Nur dieser Name geht an Open-Meteo, um das Wetter zu finden.", _s.WeatherCity, false, text =>
+                {
+                    _s.WeatherCity = text;
+                    _s.WeatherPlace = null;
+                    App.Widget<WeatherCard>()?.Refresh();
+                });
+                break;
+
+            case 3:
+                Cards("Musik & Spaß", ("Music", "Musik", "Cover, Tasten und Pegel."), ("Terminal", "Terminal", "fetch, cava, life, orb und rain."),
+                    ("Bonsai", "Bonsai", "Wächst, will gegossen werden."), ("Koi", "Koi-Teich", "Klick ins Wasser macht Wellen."));
+                break;
+
+            case 4:
+                Cards("Freunde", ("Steam", "Steam", "Freunde online und ihre Spiele."), ("Discord", "Discord", "Server: online, Spiele und Sprachkanäle."));
+
+                var steam = Section("Steam");
+                TextSetting(steam, "API-Key", "Kostenlos unter steamcommunity.com/dev/apikey. Bleibt nur auf diesem PC.", _s.SteamKey, true, text => { _s.SteamKey = text; App.Widget<SteamCard>()?.Refresh(); });
+                TextSetting(steam, "Steam-ID", "Die 17-stellige ID oder der Name aus deinem Profil-Link.", _s.SteamId, false, text => { _s.SteamId = text; App.Widget<SteamCard>()?.Refresh(); });
+                ActionRow(steam, "API-Key holen", "Öffnet die Steam-Seite im Browser.", "Öffnen", () => Ascii.Open("https://steamcommunity.com/dev/apikey"));
+                steam.Children.Add(new TextBlock { Text = "Deine Freundesliste muss in den Steam-Privatsphäre-Einstellungen öffentlich sein.", FontFamily = Theme.Mono, FontSize = 10, Foreground = Dim, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 10) });
+
+                var discord = Section("Discord-Bot");
+                discord.Children.Add(new TextBlock
+                {
+                    Text = "Discord gibt Freundeslisten und private Calls nicht an fremde Apps. Ein eigener Bot auf deinem Server zeigt, wer dort online ist, was gespielt wird und wer in welchem Sprachkanal ist.\n\n" +
+                           "1. Im Developer-Portal eine Anwendung anlegen, unter „Bot“ den Token kopieren.\n" +
+                           "2. Dort „Presence Intent“ und „Server Members Intent“ einschalten.\n" +
+                           "3. Unter „OAuth2 → URL Generator“ Scope „bot“ wählen und den Bot auf deinen Server einladen.\n" +
+                           "4. Den Token hier eintragen.",
+                    FontFamily = Theme.Mono, FontSize = 10, Foreground = Dim, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 6),
+                });
+                TextSetting(discord, "Bot-Token", "Bleibt nur auf diesem PC. Gib ihn niemandem.", _s.DiscordToken, true, text => { _s.DiscordToken = text; App.Widget<DiscordCard>()?.Refresh(); });
+                ActionRow(discord, "Developer-Portal", "Öffnet discord.com/developers im Browser.", "Öffnen", () => Ascii.Open("https://discord.com/developers/applications"));
+                break;
+        }
+    }
+
+    /// <summary>A text field with an "Übernehmen" key; secrets are shown as dots.</summary>
+    private void TextSetting(StackPanel into, string label, string hint, string value, bool secret, Action<string> apply)
+    {
+        var row = Line(label, hint);
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(190) });
+        row.ColumnDefinitions.Add(new ColumnDefinition());
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Control box;
+        Func<string> read;
+        if (secret)
+        {
+            var pass = new PasswordBox { Password = value ?? "", FontFamily = Theme.Mono, FontSize = 12, Foreground = Brushes.White, CaretBrush = Brushes.White, BorderThickness = new Thickness(0), Padding = new Thickness(8, 6, 8, 6), Background = Brushes.Transparent, VerticalContentAlignment = VerticalAlignment.Center };
+            box = pass;
+            read = () => pass.Password;
+        }
+        else
+        {
+            var text = new TextBox { Text = value ?? "", FontFamily = Theme.Mono, FontSize = 12, Foreground = Brushes.White, CaretBrush = Brushes.White, BorderThickness = new Thickness(0), Padding = new Thickness(8, 6, 8, 6), Background = Brushes.Transparent, VerticalContentAlignment = VerticalAlignment.Center };
+            box = text;
+            read = () => text.Text;
+        }
+        var field = new Border { Background = Field, BorderBrush = Theme.Res("LineHi"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(2), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0), Child = box };
+        var use = Action("Übernehmen", () => { apply(read().Trim()); _s.Save(); });
+        Grid.SetColumn(field, 1);
         Grid.SetColumn(use, 2);
-        place.Children.Add(cityField);
-        place.Children.Add(use);
-        weather.Children.Add(place);
-        var layout = Section("Anordnung");
-        Pick(layout, "Aufteilung", new[] { "Ein Block", "Einzeln" }, _s.WidgetsFree ? 1 : 0, i => { _s.WidgetsFree = i == 1; App.ApplyWidgetLayout(); });
-        ActionRow(layout, "Widgets verschieben", "Widgets mit der Maus an ihren Platz ziehen.", WidgetMover.Editing ? "Fertig" : "Anordnen", () =>
-        {
-            if (!_s.ShowWidgets) { _s.ShowWidgets = true; _s.Save(); App.ApplyWidgetVisibility(); }
-            WidgetMover.SetEditing(!WidgetMover.Editing);
-            Reload();
-        }, accent: WidgetMover.Editing);
-
-        var size = Section("Größe");
-        Slider(size, "Größe", 0.7, 1.3, () => _s.WidgetScale, v => { _s.WidgetScale = Math.Round(v, 2); App.ApplyWidgetLook(); }, v => $"{v * 100:0} %");
-        Slider(size, "Deckkraft", 0.3, 1, () => _s.WidgetOpacity, v => { _s.WidgetOpacity = Math.Round(v, 2); App.ApplyWidgetLook(); }, v => $"{v * 100:0} %");
+        row.Children.Add(field);
+        row.Children.Add(use);
+        into.Children.Add(row);
     }
 
     private void Themes()

@@ -94,7 +94,7 @@ public partial class App : Application
         _widgets.Add(new StatsWindow());
         _widgets.Add(new TempWindow());
         // Cards of the terminal look (2.3)
-        _widgets.AddRange(new Window[] { new MusicCard(), new TerminalCard(), new BonsaiCard(), new WeatherCard(), new ClockCard(), new CalendarCard(), new SignalCard(), new KoiCard() });
+        _widgets.AddRange(new Window[] { new MusicCard(), new TerminalCard(), new BonsaiCard(), new WeatherCard(), new ClockCard(), new CalendarCard(), new SignalCard(), new KoiCard(), new SteamCard(), new DiscordCard() });
         ApplyWidgetLayout();
         ApplyWidgetLook();
         TaskbarHider.Start();
@@ -209,7 +209,7 @@ public partial class App : Application
     {
         Pulse.Force = true;
         Theme.ApplyFont();
-        var list = new Window[] { new MusicCard(), new TerminalCard(), new BonsaiCard(), new WeatherCard(), new ClockCard(), new CalendarCard(), new SignalCard(), new KoiCard() };
+        var list = new Window[] { new MusicCard(), new TerminalCard(), new BonsaiCard(), new WeatherCard(), new ClockCard(), new CalendarCard(), new SignalCard(), new KoiCard(), new SteamCard(), new DiscordCard() };
         var args = Environment.GetCommandLineArgs();
         int only = Array.IndexOf(args, "--only");
         if (only >= 0 && only + 1 < args.Length) { foreach (var w in list.Where(w => w.GetType().Name != args[only + 1])) w.Close(); list = list.Where(w => w.GetType().Name == args[only + 1]).ToArray(); }
