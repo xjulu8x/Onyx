@@ -10,24 +10,25 @@ namespace DesktopOverlay;
 /// <summary>Central place for the look: accent color, animation speed, fonts and the ready-made themes.</summary>
 internal static class Theme
 {
-    private static readonly Color DefaultAccent = Color.FromRgb(0x2B, 0x8C, 0xFF);
+    private static readonly Color DefaultAccent = Color.FromRgb(0xE6, 0xE6, 0xE6);
 
     public static readonly (string Label, string Family)[] Fonts =
     {
         ("Standard", "Segoe UI Variable Display, Segoe UI"),
+        ("Cascadia Mono", "Cascadia Mono, Consolas"),
         ("Bahnschrift", "Bahnschrift"),
         ("Corbel", "Corbel"),
         ("Consolas", "Consolas"),
     };
 
-    public static readonly string[] AccentColors = { "#2B8CFF", "#7FA6F0", "#B9BCC4", "#FFFFFF" };
+    public static readonly string[] AccentColors = { "#E6E6E6", "#30D158", "#FF453A", "#FFB340" };
 
     public static readonly (string Name, string Island, string Taskbar, string Widgets, string Accent, double Transparency)[] Presets =
     {
-        ("Onyx", "#060608", "#060608", "#FFFFFF", "#2B8CFF", 0.12),
-        ("Mitternacht", "#0B1A36", "#0B1A36", "#FFFFFF", "#7FA6F0", 0.10),
-        ("Graphit", "#1E1F23", "#1E1F23", "#B9BCC4", "#B9BCC4", 0.08),
-        ("Kontrast", "#050506", "#050506", "#FFFFFF", "#FFFFFF", 0.02),
+        ("Mono", "#0A0A0A", "#0A0A0A", "#E6E6E6", "#E6E6E6", 0.04),
+        ("Phosphor", "#070A08", "#070A08", "#D8F5DF", "#30D158", 0.04),
+        ("Signal", "#0A0A0A", "#0A0A0A", "#E6E6E6", "#FF453A", 0.04),
+        ("Bernstein", "#0B0906", "#0B0906", "#F2E3C6", "#FFB340", 0.04),
     };
 
     public static Color Accent => Settings.ToColor(Settings.Current.AccentColor, 0xFF, DefaultAccent);
@@ -87,35 +88,63 @@ internal static class Theme
         return fade;
     }
 
-    /// <summary>Background of a surface: plain, or a tiled fine grain. Either way it is one static brush with no running cost.</summary>
+    /// <summary>Background of a surface: a flat dark sheet, with a fine dot grid when "Punktraster" is on. One static brush, no running cost.</summary>
     public static Brush Surface(string hex, byte alpha)
     {
-        var color = Settings.ToColor(hex, alpha, Color.FromRgb(0x06, 0x06, 0x08));
+        var color = Settings.ToColor(hex, alpha, Color.FromRgb(0x0A, 0x0A, 0x0A));
         if (!Settings.Current.Grain)
         {
-            // Dark glass: a touch lighter at the top, like light falling on it.
-            var top = Color.FromArgb(color.A, (byte)Math.Min(255, color.R + 22), (byte)Math.Min(255, color.G + 22), (byte)Math.Min(255, color.B + 24));
-            var glass = new LinearGradientBrush(top, color, 90);
-            glass.Freeze();
-            return glass;
+            var flat = new SolidColorBrush(color);
+            flat.Freeze();
+            return flat;
         }
-        const int size = 128;
-        var random = new Random(7); // same pattern every time
+        return DotGrid(color);
+    }
+
+    /// <summary>The dot grid of the terminal look: one faint dot every 8 pixels on the given color.</summary>
+    public static Brush DotGrid(Color color, byte dot = 0x18)
+    {
+        // An 8x8 tile with one dot, blended onto the color here, so the brush is a plain bitmap.
+        const int size = 8;
         var px = new byte[size * size * 4];
         for (int i = 0; i < px.Length; i += 4)
         {
-            int noise = random.Next(-9, 10);
-            px[i] = (byte)Math.Clamp(color.B + noise, 0, 255);
-            px[i + 1] = (byte)Math.Clamp(color.G + noise, 0, 255);
-            px[i + 2] = (byte)Math.Clamp(color.R + noise, 0, 255);
-            px[i + 3] = alpha;
+            bool isDot = i == 0;
+            double k = isDot ? dot / 255.0 : 0;
+            px[i] = (byte)(color.B + (255 - color.B) * k);
+            px[i + 1] = (byte)(color.G + (255 - color.G) * k);
+            px[i + 2] = (byte)(color.R + (255 - color.R) * k);
+            px[i + 3] = color.A;
         }
-        var tile = System.Windows.Media.Imaging.BitmapSource.Create(size, size, 96, 96, PixelFormats.Bgra32, null, px, size * 4);
+        // Premultiplied, so the see-through bar stays correct.
+        for (int i = 0; i < px.Length; i += 4)
+            for (int c = 0; c < 3; c++) px[i + c] = (byte)(px[i + c] * color.A / 255);
+        var tile = System.Windows.Media.Imaging.BitmapSource.Create(size, size, 96, 96, PixelFormats.Pbgra32, null, px, size * 4);
         tile.Freeze();
         var brush = new ImageBrush(tile) { TileMode = TileMode.Tile, ViewportUnits = BrushMappingMode.Absolute, Viewport = new Rect(0, 0, size, size), Stretch = Stretch.None };
+        RenderOptions.SetBitmapScalingMode(brush, BitmapScalingMode.NearestNeighbor);
         brush.Freeze();
         return brush;
     }
+
+    // ---------- terminal look: shared pieces for code-built parts ----------
+
+    public static FontFamily Mono => (FontFamily)Application.Current.Resources["Mono"];
+    public static Brush Res(string key) => (Brush)Application.Current.Resources[key];
+
+    /// <summary>A framed card: faint fill, thin line, almost square corners.</summary>
+    public static System.Windows.Controls.Border Card(UIElement child = null, Thickness? padding = null) => new()
+    {
+        Background = Res("Card"), BorderBrush = Res("Line"), BorderThickness = new Thickness(1),
+        CornerRadius = new CornerRadius(2), Padding = padding ?? new Thickness(12), Child = child,
+    };
+
+    /// <summary>Mono caption like "+ MUSIK / 01".</summary>
+    public static System.Windows.Controls.TextBlock Tag(string text, double size = 10) => new()
+    {
+        Text = text.ToUpperInvariant(), FontFamily = Mono, FontSize = size, Foreground = Res("Dim"),
+        VerticalAlignment = VerticalAlignment.Center,
+    };
 
     private static LinearGradientBrush _lightRun;
 
@@ -125,7 +154,7 @@ internal static class Theme
         var accent = Accent;
         switch (Settings.Current.RimStyle)
         {
-            case 1 when subtle: return (new SolidColorBrush(Color.FromArgb(0x1F, 255, 255, 255)), 1);
+            case 1: return (new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33)), 1);
             case 2: return (new SolidColorBrush(Color.FromArgb(0xA0, accent.R, accent.G, accent.B)), 1);
             case 3: return (LightRun(), 1);
             default: return (Brushes.Transparent, 0);
@@ -165,6 +194,14 @@ internal static class Theme
 
     public static void UsePreset(int index)
     {
+        UsePresetValues(index);
+        Settings.Current.Save();
+        ApplyAll();
+    }
+
+    /// <summary>Only sets the values of a preset, without saving or redrawing.</summary>
+    public static void UsePresetValues(int index)
+    {
         var p = Presets[index];
         var s = Settings.Current;
         s.IslandColor = p.Island;
@@ -172,8 +209,6 @@ internal static class Theme
         s.WidgetColor = p.Widgets;
         s.AccentColor = p.Accent;
         s.TaskbarTransparency = p.Transparency;
-        s.Save();
-        ApplyAll();
     }
 
     // ---------- motion ----------

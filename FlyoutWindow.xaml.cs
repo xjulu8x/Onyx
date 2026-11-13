@@ -112,7 +112,10 @@ public partial class FlyoutWindow : Window
     private Brush Dim => (Brush)FindResource("Dim");
     private FontFamily Icons => (FontFamily)FindResource("Icons");
 
-    private TextBlock Header(string text) => new() { Text = text, FontSize = 15, FontWeight = FontWeights.SemiBold, Margin = new Thickness(2, 0, 0, 12) };
+    // Terminal look: section titles are mono captions like "+ NETZWERK".
+    private TextBlock Header(string text) => new() { Text = "+ " + text.ToUpperInvariant(), FontFamily = Theme.Mono, FontSize = 11, Foreground = Theme.Res("Dim"), Margin = new Thickness(2, 0, 0, 12) };
+    private static TextBlock Sub(string text, double top) => new() { Text = "+ " + text.ToUpperInvariant(), FontFamily = Theme.Mono, FontSize = 10, Foreground = Theme.Res("Dim"), Margin = new Thickness(2, top, 0, 6) };
+    private static Border Framed(byte fill, Thickness padding, Thickness margin) => new() { Background = new SolidColorBrush(Color.FromArgb(fill, 255, 255, 255)), BorderBrush = Theme.Res("Line"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(2), Padding = padding, Margin = margin };
 
     private TextBlock Glyph(string g, double size = 16) => new() { Text = g, FontFamily = Icons, FontSize = size, VerticalAlignment = VerticalAlignment.Center };
 
@@ -137,7 +140,7 @@ public partial class FlyoutWindow : Window
         g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(44) });
         var mute = new Button { Style = (Style)FindResource("IconButton"), FontSize = 16, Padding = new Thickness(8, 6, 8, 6), Margin = new Thickness(-6, 0, 8, 0) };
         var slider = new VolumeSlider();
-        var pct = new TextBlock { FontSize = 12, FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+        var pct = new TextBlock { FontFamily = Theme.Mono, FontSize = 11, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
         slider.Changed += (v, m) => { pct.Text = $"{v * 100:0}%"; mute.Content = VolumeSlider.Glyph(v, m); };
         mute.Click += (_, _) => { Volume.ToggleMute(); slider.Refresh(); };
         Grid.SetColumn(slider, 1);
@@ -181,11 +184,11 @@ public partial class FlyoutWindow : Window
             n.GetIPProperties().GatewayAddresses.Count > 0);
         bool wifi = active?.NetworkInterfaceType == NetworkInterfaceType.Wireless80211;
 
-        var card = new Border { Background = new SolidColorBrush(Color.FromArgb(0x14, 255, 255, 255)), CornerRadius = new CornerRadius(16), Padding = new Thickness(14, 12, 14, 12) };
+        var card = Framed(0x0C, new Thickness(14, 12, 14, 12), new Thickness(0));
         var cg = new Grid();
         cg.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         cg.ColumnDefinitions.Add(new ColumnDefinition());
-        var iconBg = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(20), Background = new SolidColorBrush(active != null ? Theme.Accent : Color.FromArgb(0x26, 255, 255, 255)) };
+        var iconBg = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(2), BorderBrush = Theme.Res("LineHi"), BorderThickness = new Thickness(1), Background = new SolidColorBrush(active != null ? Theme.Accent : Color.FromArgb(0x10, 255, 255, 255)) };
         var ic = Glyph(active == null ? "" : wifi ? "" : "", 17);
         ic.HorizontalAlignment = HorizontalAlignment.Center;
         iconBg.Child = ic;
@@ -196,16 +199,16 @@ public partial class FlyoutWindow : Window
         info.Children.Add(new TextBlock
         {
             Text = active == null ? "Kein Netzwerk" : $"Verbunden · {SystemMonitor.Instance.LocalIp}" + (active.Speed > 0 ? $" · {active.Speed / 1_000_000} Mbit/s" : ""),
-            FontSize = 11, Foreground = Dim,
+            FontFamily = Theme.Mono, FontSize = 10, Foreground = Dim,
         });
         Grid.SetColumn(info, 1);
         cg.Children.Add(info);
         card.Child = cg;
         root.Children.Add(card);
 
-        root.Children.Add(new TextBlock { Text = "WLAN-Netzwerke", FontSize = 12, FontWeight = FontWeights.SemiBold, Margin = new Thickness(2, 14, 0, 6) });
+        root.Children.Add(Sub("WLAN-Netzwerke", 14));
         var list = new StackPanel();
-        list.Children.Add(new TextBlock { Text = "Suche…", FontSize = 12, Foreground = Dim, Margin = new Thickness(2, 0, 0, 0) });
+        list.Children.Add(new TextBlock { Text = "Suche…", FontFamily = Theme.Mono, FontSize = 11, Foreground = Dim, Margin = new Thickness(2, 0, 0, 0) });
         root.Children.Add(list);
         LoadWifi(list, name);
 
@@ -234,7 +237,7 @@ public partial class FlyoutWindow : Window
         list.Children.Clear();
         if (networks.Count == 0)
         {
-            list.Children.Add(new TextBlock { Text = "Keine WLAN-Netzwerke gefunden", FontSize = 12, Foreground = Dim, Margin = new Thickness(2, 0, 0, 0) });
+            list.Children.Add(new TextBlock { Text = "Keine WLAN-Netzwerke gefunden", FontFamily = Theme.Mono, FontSize = 11, Foreground = Dim, Margin = new Thickness(2, 0, 0, 0) });
             return;
         }
         foreach (var (ssid, signal) in networks)
@@ -248,7 +251,7 @@ public partial class FlyoutWindow : Window
             var t = new TextBlock { Text = ssid, FontSize = 12, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
             Grid.SetColumn(t, 1);
             g.Children.Add(t);
-            var state = new TextBlock { Text = ssid == current ? "Verbunden" : $"{signal}%", FontSize = 11, Foreground = Dim, VerticalAlignment = VerticalAlignment.Center };
+            var state = new TextBlock { Text = ssid == current ? "VERBUNDEN" : $"{signal}%", FontFamily = Theme.Mono, FontSize = 10, Foreground = Dim, VerticalAlignment = VerticalAlignment.Center };
             Grid.SetColumn(state, 2);
             g.Children.Add(state);
             b.Content = g;
@@ -289,13 +292,13 @@ public partial class FlyoutWindow : Window
         var root = new StackPanel();
 
         // Clock + date
-        _bigTime = new TextBlock { Text = DateTime.Now.ToString("HH:mm:ss"), FontSize = 34, FontWeight = FontWeights.Light };
+        _bigTime = new TextBlock { Text = DateTime.Now.ToString("HH:mm:ss"), FontFamily = Theme.Mono, FontSize = 30 };
         root.Children.Add(_bigTime);
-        root.Children.Add(new TextBlock { Text = DateTime.Now.ToString("dddd, d. MMMM yyyy", De), FontSize = 12, Foreground = Dim, Margin = new Thickness(2, 0, 0, 14) });
+        root.Children.Add(new TextBlock { Text = DateTime.Now.ToString("dddd, d. MMMM yyyy", De).ToUpperInvariant(), FontFamily = Theme.Mono, FontSize = 10, Foreground = Dim, Margin = new Thickness(2, 0, 0, 14) });
 
 
         // Notifications
-        root.Children.Add(new TextBlock { Text = "Benachrichtigungen", FontSize = 12, FontWeight = FontWeights.SemiBold, Margin = new Thickness(2, 16, 0, 6) });
+        root.Children.Add(Sub("Benachrichtigungen", 16));
         var notes = new StackPanel();
         root.Children.Add(notes);
         LoadNotifications(notes);
@@ -317,15 +320,15 @@ public partial class FlyoutWindow : Window
             {
                 var binding = n.Notification.Visual.GetBinding(global::Windows.UI.Notifications.KnownNotificationBindings.ToastGeneric);
                 var texts = binding?.GetTextElements().Select(t => t.Text).ToList() ?? new List<string>();
-                var card = new Border { Background = new SolidColorBrush(Color.FromArgb(0x14, 255, 255, 255)), CornerRadius = new CornerRadius(14), Padding = new Thickness(12, 9, 12, 9), Margin = new Thickness(0, 2, 0, 2) };
+                var card = Framed(0x0C, new Thickness(12, 9, 12, 9), new Thickness(0, 2, 0, 2));
                 var sp = new StackPanel();
-                sp.Children.Add(new TextBlock { Text = n.AppInfo.DisplayInfo.DisplayName, FontSize = 10, Foreground = Dim });
+                sp.Children.Add(new TextBlock { Text = n.AppInfo.DisplayInfo.DisplayName.ToUpperInvariant(), FontFamily = Theme.Mono, FontSize = 9.5, Foreground = Dim, Margin = new Thickness(0, 0, 0, 2) });
                 if (texts.Count > 0) sp.Children.Add(new TextBlock { Text = texts[0], FontSize = 12, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
                 if (texts.Count > 1) sp.Children.Add(new TextBlock { Text = texts[1], FontSize = 11, Foreground = Dim, TextTrimming = TextTrimming.CharacterEllipsis });
                 card.Child = sp;
                 panel.Children.Add(card);
             }
-            if (list.Count == 0) panel.Children.Add(new TextBlock { Text = "Keine neuen Benachrichtigungen", FontSize = 12, Foreground = Dim, Margin = new Thickness(2, 0, 0, 0) });
+            if (list.Count == 0) panel.Children.Add(new TextBlock { Text = "Keine neuen Benachrichtigungen", FontFamily = Theme.Mono, FontSize = 11, Foreground = Dim, Margin = new Thickness(2, 0, 0, 0) });
         }
         catch
         {
@@ -345,13 +348,13 @@ public partial class FlyoutWindow : Window
     private FrameworkElement RunningAppsSection()
     {
         var root = new StackPanel();
-        var header = new TextBlock { Text = "Laufende Apps", FontSize = 12, FontWeight = FontWeights.SemiBold, Margin = new Thickness(2, 16, 0, 6) };
+        var header = Sub("Laufende Apps", 16);
         root.Children.Add(header);
         var list = new StackPanel();
         // Own scroll area so a long list doesn't push the calendar out of reach.
         var scroll = new ScrollViewer { Content = list, MaxHeight = 250, VerticalScrollBarVisibility = ScrollBarVisibility.Hidden, Focusable = false };
         root.Children.Add(scroll);
-        list.Children.Add(new TextBlock { Text = "Wird geladen…", FontSize = 12, Foreground = Dim, Margin = new Thickness(2, 0, 0, 0) });
+        list.Children.Add(new TextBlock { Text = "Wird geladen…", FontFamily = Theme.Mono, FontSize = 11, Foreground = Dim, Margin = new Thickness(2, 0, 0, 0) });
         LoadRunningApps(list, header, scroll);
         return root;
     }
@@ -359,7 +362,7 @@ public partial class FlyoutWindow : Window
     private async void LoadRunningApps(StackPanel list, TextBlock header, ScrollViewer scroll)
     {
         var apps = await Task.Run(CollectRunningApps);
-        header.Text = $"Laufende Apps ({apps.Count})";
+        header.Text = $"+ LAUFENDE APPS / {apps.Count:00}";
         list.Children.Clear();
         foreach (var app in apps) list.Children.Add(RunningAppRow(app, list, header));
         scroll.UpdateLayout();
@@ -406,7 +409,7 @@ public partial class FlyoutWindow : Window
 
     private FrameworkElement RunningAppRow(RunningApp app, StackPanel list, TextBlock header)
     {
-        var row = new Border { Background = new SolidColorBrush(Color.FromArgb(0x10, 255, 255, 255)), CornerRadius = new CornerRadius(12), Padding = new Thickness(10, 6, 6, 6), Margin = new Thickness(0, 2, 0, 2) };
+        var row = Framed(0x08, new Thickness(10, 6, 6, 6), new Thickness(0, 2, 0, 2));
         var g = new Grid();
         g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         g.ColumnDefinitions.Add(new ColumnDefinition());
@@ -421,7 +424,7 @@ public partial class FlyoutWindow : Window
         text.Children.Add(new TextBlock
         {
             Text = (app.HasWindow ? "Geöffnet" : "Im Hintergrund") + $" · {app.Bytes / 1048576.0:0} MB" + (app.Pids.Length > 1 ? $" · {app.Pids.Length} Prozesse" : ""),
-            FontSize = 10, Foreground = Dim,
+            FontFamily = Theme.Mono, FontSize = 9.5, Foreground = Dim,
         });
         Grid.SetColumn(text, 1);
         g.Children.Add(text);
@@ -438,7 +441,7 @@ public partial class FlyoutWindow : Window
             row.BeginAnimation(OpacityProperty, new DoubleAnimation(0, Theme.Ms(150)));
             await Task.Delay(160);
             list.Children.Remove(row);
-            header.Text = $"Laufende Apps ({list.Children.Count})";
+            header.Text = $"+ LAUFENDE APPS / {list.Children.Count:00}";
         };
         Grid.SetColumn(end, 2);
         g.Children.Add(end);
@@ -450,10 +453,10 @@ public partial class FlyoutWindow : Window
     {
         var today = DateTime.Today;
         var root = new StackPanel { Margin = new Thickness(0, 16, 0, 0) };
-        root.Children.Add(new TextBlock { Text = today.ToString("MMMM yyyy", De), FontSize = 12, FontWeight = FontWeights.SemiBold, Margin = new Thickness(2, 0, 0, 6) });
+        root.Children.Add(new TextBlock { Text = today.ToString("MMMM yyyy", De).ToUpperInvariant(), FontFamily = Theme.Mono, FontSize = 11, FontWeight = FontWeights.Bold, Margin = new Thickness(2, 0, 0, 6) });
         var grid = new System.Windows.Controls.Primitives.UniformGrid { Columns = 7 };
         foreach (var d in new[] { "Mo", "Di", "Mi", "Do", "Fr", "Sa", "So" })
-            grid.Children.Add(new TextBlock { Text = d, FontSize = 10, Foreground = Dim, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 4) });
+            grid.Children.Add(new TextBlock { Text = d.ToUpperInvariant(), FontFamily = Theme.Mono, FontSize = 9.5, Foreground = Dim, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 4) });
         var first = new DateTime(today.Year, today.Month, 1);
         int offset = ((int)first.DayOfWeek + 6) % 7;
         for (int i = 0; i < offset; i++) grid.Children.Add(new Border());
@@ -462,9 +465,9 @@ public partial class FlyoutWindow : Window
             bool isToday = day == today.Day;
             grid.Children.Add(new Border
             {
-                Width = 28, Height = 28, CornerRadius = new CornerRadius(14), Margin = new Thickness(1),
-                Background = isToday ? new SolidColorBrush(Theme.Accent) : Brushes.Transparent,
-                Child = new TextBlock { Text = day.ToString(), FontSize = 11, FontWeight = isToday ? FontWeights.Bold : FontWeights.Normal, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
+                Width = 28, Height = 24, CornerRadius = new CornerRadius(2), Margin = new Thickness(1),
+                Background = isToday ? new SolidColorBrush(Color.FromRgb(0xE6, 0xE6, 0xE6)) : Brushes.Transparent,
+                Child = new TextBlock { Text = day.ToString(), FontFamily = Theme.Mono, FontSize = 10.5, FontWeight = isToday ? FontWeights.Bold : FontWeights.Normal, Foreground = isToday ? new SolidColorBrush(Color.FromRgb(0x0A, 0x0A, 0x0A)) : Brushes.White, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
             });
         }
         root.Children.Add(grid);

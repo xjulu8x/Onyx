@@ -14,7 +14,7 @@ namespace DesktopOverlay;
 public class VolumeSlider : Grid
 {
     private readonly Border _fill;
-    private readonly Ellipse _thumb;
+    private readonly Rectangle _thumb;
     private bool _dragging;
     private readonly Func<float> _get;
     private readonly Action<float> _set;
@@ -33,10 +33,11 @@ public class VolumeSlider : Grid
         Height = 22;
         Background = Brushes.Transparent; // hit-testable across the full height
         Cursor = Cursors.Hand;
-        Children.Add(new Border { Height = 6, CornerRadius = new CornerRadius(3), Background = new SolidColorBrush(Color.FromArgb(0x33, 255, 255, 255)) });
-        _fill = new Border { Height = 6, CornerRadius = new CornerRadius(3), Background = Brushes.White, HorizontalAlignment = HorizontalAlignment.Left };
+        // Terminal look: a 2 px line with a slim upright handle.
+        Children.Add(new Border { Height = 2, Background = new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33)) });
+        _fill = new Border { Height = 2, Background = new SolidColorBrush(Color.FromRgb(0xE6, 0xE6, 0xE6)), HorizontalAlignment = HorizontalAlignment.Left };
         Children.Add(_fill);
-        _thumb = new Ellipse { Width = 14, Height = 14, Fill = Brushes.White, HorizontalAlignment = HorizontalAlignment.Left };
+        _thumb = new Rectangle { Width = 6, Height = 14, Fill = new SolidColorBrush(Color.FromRgb(0xE6, 0xE6, 0xE6)), HorizontalAlignment = HorizontalAlignment.Left };
         Children.Add(_thumb);
 
         MouseLeftButtonDown += (_, e) => { _dragging = true; CaptureMouse(); SetFrom(e); };
@@ -66,7 +67,7 @@ public class VolumeSlider : Grid
         double w = Math.Max(0, ActualWidth * v);
         _fill.Width = w;
         _fill.Opacity = _thumb.Opacity = muted ? 0.4 : 1;
-        _thumb.Margin = new Thickness(Math.Clamp(w - 7, 0, Math.Max(0, ActualWidth - 14)), 0, 0, 0);
+        _thumb.Margin = new Thickness(Math.Clamp(w - 3, 0, Math.Max(0, ActualWidth - 6)), 0, 0, 0);
         Changed?.Invoke(v, muted);
     }
 

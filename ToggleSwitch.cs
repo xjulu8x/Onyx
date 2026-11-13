@@ -7,13 +7,15 @@ using System.Windows.Shapes;
 
 namespace DesktopOverlay;
 
-/// <summary>Small animated on/off pill switch in the overlay's style.</summary>
+/// <summary>On/off switch in the terminal look: a framed slot with a square knob; on, the slot fills with the accent color.</summary>
 public class ToggleSwitch : Border
 {
     private static Color On => Theme.Accent;
-    private static readonly Color Off = Color.FromArgb(0x38, 255, 255, 255);
+    private static readonly Color Off = Color.FromArgb(0x00, 255, 255, 255);
+    private static readonly Color KnobOff = Color.FromRgb(0x6A, 0x6A, 0x6A);
+    private static readonly Color KnobOn = Color.FromRgb(0x0A, 0x0A, 0x0A);
     private readonly TranslateTransform _knob = new();
-    private readonly SolidColorBrush _bg;
+    private readonly SolidColorBrush _bg, _knobFill;
     private bool _isOn;
 
     public event Action<bool> Toggled;
@@ -21,12 +23,15 @@ public class ToggleSwitch : Border
     public ToggleSwitch(bool isOn)
     {
         _isOn = isOn;
-        Width = 36; Height = 20; CornerRadius = new CornerRadius(10); Cursor = Cursors.Hand;
+        Width = 36; Height = 18; CornerRadius = new CornerRadius(2); Cursor = Cursors.Hand;
+        BorderThickness = new Thickness(1);
+        BorderBrush = new SolidColorBrush(Color.FromRgb(0x4A, 0x4A, 0x4A));
         Background = _bg = new SolidColorBrush(isOn ? On : Off);
-        _knob.X = isOn ? 19 : 3;
-        Child = new Ellipse
+        _knobFill = new SolidColorBrush(isOn ? KnobOn : KnobOff);
+        _knob.X = isOn ? 20 : 2;
+        Child = new Rectangle
         {
-            Width = 14, Height = 14, Fill = Brushes.White, HorizontalAlignment = HorizontalAlignment.Left,
+            Width = 12, Height = 12, Fill = _knobFill, HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Center, RenderTransform = _knob,
         };
         MouseLeftButtonUp += (_, e) => { Set(!_isOn); Toggled?.Invoke(_isOn); e.Handled = true; };
@@ -35,8 +40,9 @@ public class ToggleSwitch : Border
     public void Set(bool isOn)
     {
         _isOn = isOn;
-        var ease = Theme.Settle;
-        _knob.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(isOn ? 19 : 3, TimeSpan.FromMilliseconds(180)) { EasingFunction = ease });
-        _bg.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(isOn ? On : Off, TimeSpan.FromMilliseconds(180)));
+        var time = Theme.Ms(160);
+        _knob.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(isOn ? 20 : 2, time) { EasingFunction = Theme.Settle });
+        _bg.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(isOn ? On : Off, time));
+        _knobFill.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(isOn ? KnobOn : KnobOff, time));
     }
 }

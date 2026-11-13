@@ -109,7 +109,7 @@ public partial class StartMenuWindow : Window
 
     private void AddSection(string title, IEnumerable<StartApp> apps)
     {
-        Sections.Children.Add(new TextBlock { Text = title, FontSize = 13, FontWeight = FontWeights.SemiBold, Margin = new Thickness(8, 6, 0, 8) });
+        Sections.Children.Add(new TextBlock { Text = "+ " + title.ToUpperInvariant(), FontFamily = Theme.Mono, FontSize = 10, Foreground = (Brush)FindResource("Dim"), Margin = new Thickness(8, 6, 0, 8) });
         var wrap = new WrapPanel { Margin = new Thickness(0, 0, 0, 12) };
         foreach (var app in apps) wrap.Children.Add(Tile(app));
         if (wrap.Children.Count == 0)

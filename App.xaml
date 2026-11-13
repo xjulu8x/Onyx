@@ -6,23 +6,38 @@
     <Application.Resources>
         <FontFamily x:Key="Icons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
         <FontFamily x:Key="Ui">Segoe UI Variable Display, Segoe UI</FontFamily>
-        <SolidColorBrush x:Key="Dim" Color="#A6FFFFFF"/>
-        <!-- Edge of glass panels: brighter at the top, where light catches the material -->
-        <LinearGradientBrush x:Key="GlassRim" StartPoint="0,0" EndPoint="0,1">
-            <GradientStop Color="#40FFFFFF" Offset="0"/>
-            <GradientStop Color="#12FFFFFF" Offset="0.35"/>
-            <GradientStop Color="#0CFFFFFF" Offset="1"/>
-        </LinearGradientBrush>
-        <!-- Dark glass of popups and the start menu: slightly lighter at the top, like light from above -->
-        <LinearGradientBrush x:Key="GlassPanel" StartPoint="0,0" EndPoint="0,1">
-            <GradientStop Color="#F21E1E24" Offset="0"/>
-            <GradientStop Color="#F2090A0D" Offset="0.5"/>
-        </LinearGradientBrush>
-        <SolidColorBrush x:Key="Track" Color="#33FFFFFF"/>
+        <!-- Terminal look: labels, numbers and keys are set in a monospaced face -->
+        <FontFamily x:Key="Mono">Cascadia Mono, Consolas</FontFamily>
+
+        <SolidColorBrush x:Key="Ink" Color="#0A0A0A"/>
+        <SolidColorBrush x:Key="Card" Color="#0CFFFFFF"/>
+        <SolidColorBrush x:Key="Line" Color="#2A2A2A"/>
+        <SolidColorBrush x:Key="LineHi" Color="#4A4A4A"/>
+        <SolidColorBrush x:Key="Dim" Color="#8E8E8E"/>
+        <SolidColorBrush x:Key="Faint" Color="#555555"/>
+        <SolidColorBrush x:Key="Signal" Color="#FF453A"/>
+        <SolidColorBrush x:Key="Track" Color="#2E2E2E"/>
+        <!-- Names kept from the glass look: the edge is a plain thin line now, the panel a dark sheet with a fine dot grid -->
+        <SolidColorBrush x:Key="GlassRim" Color="#333333"/>
+        <DrawingBrush x:Key="GlassPanel" TileMode="Tile" Viewport="0,0,8,8" ViewportUnits="Absolute" Viewbox="0,0,8,8" ViewboxUnits="Absolute" Stretch="None">
+            <DrawingBrush.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="#F80A0A0A" Geometry="M0,0 H8 V8 H0 Z"/>
+                    <GeometryDrawing Brush="#18FFFFFF" Geometry="M0,0 H1 V1 H0 Z"/>
+                </DrawingGroup>
+            </DrawingBrush.Drawing>
+        </DrawingBrush>
+
+        <!-- Small mono caption, like "+ SYSTEM / 01" -->
+        <Style x:Key="Tag" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource Mono}"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Foreground" Value="{StaticResource Dim}"/>
+        </Style>
 
         <Style x:Key="IconButton" TargetType="Button">
             <Setter Property="local:Feedback.Press" Value="True"/>
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Foreground" Value="#E6E6E6"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FontFamily" Value="{StaticResource Icons}"/>
@@ -32,15 +47,49 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="10" Padding="{TemplateBinding Padding}">
+                        <Border x:Name="b" Background="{TemplateBinding Background}" BorderBrush="Transparent" BorderThickness="1" CornerRadius="2" Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="b" Property="Background" Value="#24FFFFFF"/>
+                                <Setter TargetName="b" Property="Background" Value="#14FFFFFF"/>
+                                <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource Line}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="b" Property="Background" Value="#38FFFFFF"/>
+                                <Setter TargetName="b" Property="Background" Value="#2EFFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Framed key with a mono label ("F  FEED"); it inverts while pressed -->
+        <Style x:Key="Key" TargetType="Button">
+            <Setter Property="local:Feedback.Press" Value="True"/>
+            <Setter Property="Foreground" Value="#E6E6E6"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="FontFamily" Value="{StaticResource Mono}"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="b" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
+                                CornerRadius="2" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="#14FFFFFF"/>
+                                <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource LineHi}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="#E6E6E6"/>
+                                <Setter Property="Foreground" Value="#0A0A0A"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -49,32 +98,32 @@
         </Style>
 
         <Style x:Key="Bar" TargetType="ProgressBar">
-            <Setter Property="Height" Value="4"/>
+            <Setter Property="Height" Value="2"/>
             <Setter Property="Minimum" Value="0"/>
             <Setter Property="Maximum" Value="1"/>
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Foreground" Value="#E6E6E6"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ProgressBar">
                         <Grid>
-                            <Border x:Name="PART_Track" Background="{StaticResource Track}" CornerRadius="3"/>
-                            <Border x:Name="PART_Indicator" Background="{TemplateBinding Foreground}" CornerRadius="3" HorizontalAlignment="Left"/>
+                            <Border x:Name="PART_Track" Background="{StaticResource Track}"/>
+                            <Border x:Name="PART_Indicator" Background="{TemplateBinding Foreground}" HorizontalAlignment="Left"/>
                         </Grid>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
 
-        <DropShadowEffect x:Key="TextShadow" BlurRadius="10" ShadowDepth="0" Opacity="0.55" Color="Black"/>
+        <DropShadowEffect x:Key="TextShadow" BlurRadius="8" ShadowDepth="0" Opacity="0.6" Color="Black"/>
 
-        <!-- Dark, rounded pop-ups (context menus, tooltips) to match the overlay instead of the Windows defaults. -->
+        <!-- Context menus and tooltips: square, thin line, mono text -->
         <Style TargetType="ContextMenu">
             <Setter Property="OverridesDefaultStyle" Value="True"/>
             <Setter Property="HasDropShadow" Value="True"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ContextMenu">
-                        <Border Background="#C80A0A0D" CornerRadius="10" BorderBrush="{StaticResource GlassRim}" BorderThickness="1" Padding="4">
+                        <Border Background="#FA0A0A0A" CornerRadius="2" BorderBrush="{StaticResource LineHi}" BorderThickness="1" Padding="3">
                             <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
                         </Border>
                     </ControlTemplate>
@@ -83,14 +132,14 @@
         </Style>
         <Style TargetType="MenuItem">
             <Setter Property="OverridesDefaultStyle" Value="True"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="FontFamily" Value="{DynamicResource Ui}"/>
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="#E6E6E6"/>
+            <Setter Property="FontFamily" Value="{StaticResource Mono}"/>
+            <Setter Property="FontSize" Value="11"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="MenuItem">
-                        <Border x:Name="b" CornerRadius="7" Padding="6,5,12,5" Background="Transparent" MinWidth="150">
+                        <Border x:Name="b" CornerRadius="1" Padding="6,5,12,5" Background="Transparent" MinWidth="160">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="24"/>
@@ -100,13 +149,14 @@
                                            VerticalAlignment="Center" Visibility="Hidden"/>
                                 <!-- Optional symbol (Segoe Fluent glyph passed as MenuItem.Icon), like the Windows menus -->
                                 <ContentPresenter ContentSource="Icon" VerticalAlignment="Center" HorizontalAlignment="Left"
-                                                  TextElement.FontFamily="{StaticResource Icons}" TextElement.FontSize="13"/>
+                                                  TextElement.FontFamily="{StaticResource Icons}" TextElement.FontSize="12"/>
                                 <ContentPresenter Grid.Column="1" ContentSource="Header" VerticalAlignment="Center" RecognizesAccessKey="True"/>
                             </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="b" Property="Background" Value="#22FFFFFF"/>
+                                <Setter TargetName="b" Property="Background" Value="#E6E6E6"/>
+                                <Setter Property="Foreground" Value="#0A0A0A"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="check" Property="Visibility" Value="Visible"/>
@@ -120,7 +170,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Separator">
-                        <Border Height="1" Margin="8,4" Background="#22FFFFFF"/>
+                        <Border Height="1" Margin="6,4" Background="{StaticResource Line}"/>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -128,13 +178,13 @@
         <Style TargetType="ToolTip">
             <Setter Property="OverridesDefaultStyle" Value="True"/>
             <Setter Property="HasDropShadow" Value="True"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="FontFamily" Value="{DynamicResource Ui}"/>
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="#E6E6E6"/>
+            <Setter Property="FontFamily" Value="{StaticResource Mono}"/>
+            <Setter Property="FontSize" Value="11"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToolTip">
-                        <Border Background="#F7141419" CornerRadius="8" BorderBrush="#26FFFFFF" BorderThickness="1" Padding="10,5">
+                        <Border Background="#FA0A0A0A" CornerRadius="2" BorderBrush="{StaticResource LineHi}" BorderThickness="1" Padding="8,4">
                             <ContentPresenter/>
                         </Border>
                     </ControlTemplate>

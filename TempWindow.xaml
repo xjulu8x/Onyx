@@ -6,20 +6,25 @@
         ShowInTaskbar="False" ResizeMode="NoResize"
         FontFamily="{DynamicResource Ui}" Foreground="White"
         TextOptions.TextFormattingMode="Ideal" TextOptions.TextRenderingMode="Grayscale">
-    <Grid Margin="10" Effect="{StaticResource TextShadow}">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="40"/>
-            <ColumnDefinition Width="96"/>
-            <ColumnDefinition Width="Auto"/>
-        </Grid.ColumnDefinitions>
-        <TextBlock Text="&#xE950;" FontFamily="{StaticResource Icons}" FontSize="28" VerticalAlignment="Center"/>
-        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0">
-            <TextBlock x:Name="TempText" Text="0%" FontSize="32" FontWeight="Light"/>
+    <Border Background="{StaticResource GlassPanel}" BorderBrush="{StaticResource GlassRim}" BorderThickness="1" CornerRadius="2" Padding="14,10,14,12" MinWidth="236">
+        <StackPanel>
+            <Grid Margin="0,0,0,8">
+                <TextBlock Text="+ CPU / TEMP" Style="{StaticResource Tag}" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                <TextBlock x:Name="Vendor" Style="{StaticResource Tag}" HorizontalAlignment="Right"/>
+            </Grid>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="TempText" Text="--°" FontSize="38" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                <StackPanel Grid.Column="1" VerticalAlignment="Bottom" Margin="14,0,0,6">
+                    <TextBlock x:Name="Model" Style="{StaticResource Tag}" HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" MaxWidth="150"/>
+                    <!-- Heat as a text gauge, like "[|||||.....]" -->
+                    <TextBlock x:Name="Gauge" FontFamily="{StaticResource Mono}" FontSize="11" HorizontalAlignment="Right" Margin="0,3,0,0"/>
+                </StackPanel>
+            </Grid>
+            <TextBlock x:Name="SubText" Style="{StaticResource Tag}" Cursor="Hand" Background="Transparent" TextWrapping="Wrap" MaxWidth="220" Margin="0,4,0,0"/>
         </StackPanel>
-        <StackPanel Grid.Column="2" VerticalAlignment="Center">
-            <TextBlock x:Name="Vendor" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Right"/>
-            <TextBlock x:Name="Model" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Right"/>
-            <TextBlock x:Name="SubText" FontSize="11" Cursor="Hand" Background="Transparent" Foreground="{StaticResource Dim}" HorizontalAlignment="Right"/>
-        </StackPanel>
-    </Grid>
+    </Border>
 </Window>

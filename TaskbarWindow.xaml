@@ -15,26 +15,26 @@
     <Grid x:Name="Root" MouseRightButtonUp="Bar_RightClick">
         <!-- Dark, slightly see-through bar; rounded corners are anti-aliased by WPF since the window is per-pixel transparent. -->
         <!-- Even, soft rim; not pixel-snapped so the rounded corners stay smoothly anti-aliased -->
-        <Border x:Name="Bg" CornerRadius="16" Background="#14000000" BorderThickness="1" BorderBrush="#1FFFFFFF" SnapsToDevicePixels="False"/>
+        <Border x:Name="Bg" CornerRadius="4" Background="#F00A0A0A" BorderThickness="1" BorderBrush="#333333" SnapsToDevicePixels="True"/>
         <!-- Form "Inseln": one surface per group, placed by UpdateShape -->
         <Border x:Name="BgMid" HorizontalAlignment="Left" Visibility="Collapsed"/>
         <Border x:Name="BgRight" HorizontalAlignment="Left" Visibility="Collapsed"/>
 
         <!-- Center: start + apps -->
         <StackPanel x:Name="CenterPanel" Orientation="Horizontal" HorizontalAlignment="Center">
-            <Border x:Name="StartBtn" Width="46" Height="44" CornerRadius="12" Background="#01000000" Cursor="Hand"
+            <Border x:Name="StartBtn" Width="46" Height="44" CornerRadius="2" Background="#01000000" Cursor="Hand"
                     MouseLeftButtonUp="Start_Click" MouseEnter="Hover_Enter" MouseLeave="Hover_Leave" ToolTip="Start">
-                <Grid x:Name="StartLogo" Width="22" Height="22">
+                <Grid x:Name="StartLogo" Width="20" Height="20">
                     <Grid.Resources>
                         <LinearGradientBrush x:Key="Logo" StartPoint="0,0" EndPoint="1,1">
                             <GradientStop Color="#7CD3FF" Offset="0"/>
                             <GradientStop Color="#1E8CFF" Offset="1"/>
                         </LinearGradientBrush>
                     </Grid.Resources>
-                    <Rectangle Width="10.5" Height="10.5" RadiusX="1.5" RadiusY="1.5" Fill="{StaticResource Logo}" HorizontalAlignment="Left" VerticalAlignment="Top"/>
-                    <Rectangle Width="10.5" Height="10.5" RadiusX="1.5" RadiusY="1.5" Fill="{StaticResource Logo}" HorizontalAlignment="Right" VerticalAlignment="Top"/>
-                    <Rectangle Width="10.5" Height="10.5" RadiusX="1.5" RadiusY="1.5" Fill="{StaticResource Logo}" HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
-                    <Rectangle Width="10.5" Height="10.5" RadiusX="1.5" RadiusY="1.5" Fill="{StaticResource Logo}" HorizontalAlignment="Right" VerticalAlignment="Bottom"/>
+                    <Rectangle Width="9" Height="9" RadiusX="0" RadiusY="0" Fill="{StaticResource Logo}" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                    <Rectangle Width="9" Height="9" RadiusX="0" RadiusY="0" Fill="{StaticResource Logo}" HorizontalAlignment="Right" VerticalAlignment="Top"/>
+                    <Rectangle Width="9" Height="9" RadiusX="0" RadiusY="0" Fill="{StaticResource Logo}" HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
+                    <Rectangle Width="9" Height="9" RadiusX="0" RadiusY="0" Fill="{StaticResource Logo}" HorizontalAlignment="Right" VerticalAlignment="Bottom"/>
                 </Grid>
             </Border>
             <StackPanel x:Name="AppsPanel" Orientation="Horizontal"/>

@@ -19,30 +19,30 @@ public class Settings
     [System.Text.Json.Serialization.JsonIgnore]
     public double Transparency => TaskbarTransparency ?? (TransparentTaskbar ? 0.12 : 0.02);
     public bool ShowWidgets { get; set; } = true;
-    public string IslandColor { get; set; } = "#060608";
-    public string TaskbarColor { get; set; } = "#060608";
-    public string WidgetColor { get; set; } = "#FFFFFF";
+    public string IslandColor { get; set; } = "#0A0A0A";
+    public string TaskbarColor { get; set; } = "#0A0A0A";
+    public string WidgetColor { get; set; } = "#E6E6E6";
     public Dictionary<string, double[]> WidgetPositions { get; set; } = new();
 
     // Design page
-    public string AccentColor { get; set; } = "#2B8CFF";
+    public string AccentColor { get; set; } = "#E6E6E6";
     public string FontFamily { get; set; } = "Segoe UI Variable Display, Segoe UI";
     public int AnimationSpeed { get; set; } = 1; // 0 fast, 1 normal, 2 off
     public double TaskbarHeight { get; set; } = 50;
     public double TaskbarIconSize { get; set; } = 24;
-    public double TaskbarRadius { get; set; } = 16;
+    public double TaskbarRadius { get; set; } = 4;
     public bool TaskbarAppsLeft { get; set; }
     public double IslandScale { get; set; } = 1;
-    public double IslandCorners { get; set; } = 1; // share of the full rounding
+    public double IslandCorners { get; set; } = 0.3; // share of the full rounding
     public double IslandOpacity { get; set; } = 0.97;
     public double WidgetScale { get; set; } = 1;
     public double WidgetOpacity { get; set; } = 1;
     public int TaskbarShape { get; set; } // 0 bar, 1 dock, 2 three islands
     public int IconTint { get; set; } // 0 real colors, 1 white, 2 grey, 3 accent
-    public int IndicatorStyle { get; set; } // 0 line, 1 dot, 2 glow, 3 none
+    public int IndicatorStyle { get; set; } = 1; // 0 line, 1 dot, 2 glow, 3 none
     public int RimStyle { get; set; } = 1; // 0 none, 1 subtle, 2 accent, 3 light run
     public int ClockStyle { get; set; } // 0 time and date, 1 time, 2 large
-    public bool Grain { get; set; }
+    public bool Grain { get; set; } = true;
     public int IslandShape { get; set; } = 1; // 0 floating, 1 docked (default since 2.0), 2 capsule
     public int MotionStyle { get; set; } // 0 soft, 1 springy, 2 direct
     public int WidgetGraph { get; set; } // 0 line, 1 bars, 2 rings
@@ -50,8 +50,8 @@ public class Settings
 
     // Time-of-day design and own themes
     public bool AutoTheme { get; set; }
-    public string DayTheme { get; set; } = "Graphit";
-    public string NightTheme { get; set; } = "Onyx";
+    public string DayTheme { get; set; } = "Mono";
+    public string NightTheme { get; set; } = "Mono";
     public Dictionary<string, Dictionary<string, JsonElement>> CustomThemes { get; set; } = new();
 
     // Effects

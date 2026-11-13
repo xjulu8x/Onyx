@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -16,10 +17,12 @@ public partial class SettingsWindow : Window
 
     private static readonly string[] BackgroundColors = { "#060608", "#0B1A36", "#1E1F23", "#383A40" };
     private static readonly string[] BackgroundNames = { "Schwarz", "Dunkelblau", "Anthrazit", "Grau" };
-    private static readonly string[] WidgetColors = { "#FFFFFF", "#B9BCC4", "#7FA6F0", "#0A0A0C" };
-    private static readonly string[] WidgetColorNames = { "Weiß", "Grau", "Blau", "Schwarz" };
-    private static readonly Brush Selected = new SolidColorBrush(Color.FromArgb(0x24, 255, 255, 255));
-    private static readonly Brush Card = new SolidColorBrush(Color.FromArgb(0x0E, 255, 255, 255));
+    private static readonly string[] WidgetColors = { "#E6E6E6", "#8E8E8E", "#30D158", "#FFB340" };
+    private static readonly string[] WidgetColorNames = { "Weiß", "Grau", "Grün", "Bernstein" };
+    private static readonly Brush Selected = new SolidColorBrush(Color.FromRgb(0xE6, 0xE6, 0xE6)); // terminal look: the chosen item is inverted
+    private static readonly Brush Ink = new SolidColorBrush(Color.FromRgb(0x0A, 0x0A, 0x0A));
+    private static readonly Brush Field = new SolidColorBrush(Color.FromArgb(0x10, 255, 255, 255));
+    private static readonly Brush Card = new SolidColorBrush(Color.FromArgb(0x08, 255, 255, 255));
 
     private static int _lastPage;
 
@@ -56,8 +59,8 @@ public partial class SettingsWindow : Window
         var (glyph, title, _) = _pages[index];
         var row = new StackPanel { Orientation = Orientation.Horizontal };
         row.Children.Add(new TextBlock { Text = glyph, FontFamily = (FontFamily)FindResource("Icons"), FontSize = 15, VerticalAlignment = VerticalAlignment.Center });
-        row.Children.Add(new TextBlock { Text = title, FontSize = 13, Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
-        var item = new Border { CornerRadius = new CornerRadius(8), Padding = new Thickness(10, 8, 10, 8), Margin = new Thickness(0, 1, 0, 1), Cursor = Cursors.Hand, Background = Brushes.Transparent, Child = row };
+        row.Children.Add(new TextBlock { Text = $"{index + 1:00} {title.ToUpperInvariant()}", FontFamily = Theme.Mono, FontSize = 11, Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
+        var item = new Border { CornerRadius = new CornerRadius(2), Padding = new Thickness(10, 8, 10, 8), Margin = new Thickness(0, 1, 0, 1), Cursor = Cursors.Hand, Background = Brushes.Transparent, Child = row };
         Feedback.SetPress(item, true);
         item.MouseLeftButtonUp += (_, _) => Show(index);
         return item;
@@ -66,9 +69,15 @@ public partial class SettingsWindow : Window
     private void Show(int index)
     {
         _lastPage = index;
-        for (int i = 0; i < Nav.Children.Count; i++) ((Border)Nav.Children[i]).Background = i == index ? Selected : Brushes.Transparent;
+        for (int i = 0; i < Nav.Children.Count; i++)
+        {
+            var item = (Border)Nav.Children[i];
+            item.Background = i == index ? Selected : Brushes.Transparent;
+            TextElement.SetForeground(item, i == index ? Ink : Brushes.White);
+        }
         Page.Children.Clear();
-        Page.Children.Add(new TextBlock { Text = _pages[index].Title, FontSize = 24, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 14) });
+        Page.Children.Add(new TextBlock { Text = _pages[index].Title, FontSize = 26, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 2) });
+        Page.Children.Add(new TextBlock { Text = $"ONYX / EINSTELLUNGEN / {index + 1:00}", FontFamily = Theme.Mono, FontSize = 10, Foreground = Dim, Margin = new Thickness(1, 0, 0, 10) });
         _pages[index].Build();
         PageScroll.ScrollToTop();
         // The new page settles in from slightly below instead of popping in.
@@ -88,6 +97,9 @@ public partial class SettingsWindow : Window
         for (int i = 0; i < _pages.Length; i++)
         {
             Show(i);
+            Page.BeginAnimation(OpacityProperty, null);
+            Page.Opacity = 1;
+            Page.RenderTransform = null;
             UpdateLayout();
             Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Loaded); // let sliders fill in their values
             var image = new System.Windows.Media.Imaging.RenderTargetBitmap((int)(root.ActualWidth * dpi.DpiScaleX), (int)(root.ActualHeight * dpi.DpiScaleY), dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
@@ -103,9 +115,9 @@ public partial class SettingsWindow : Window
 
     private StackPanel Section(string title)
     {
-        Page.Children.Add(new TextBlock { Text = title, FontSize = 12, FontWeight = FontWeights.SemiBold, Foreground = Dim, Margin = new Thickness(2, 16, 0, 6) });
+        Page.Children.Add(new TextBlock { Text = "+ " + title.ToUpperInvariant(), FontFamily = Theme.Mono, FontSize = 10, Foreground = Dim, Margin = new Thickness(2, 16, 0, 6) });
         var body = new StackPanel();
-        Page.Children.Add(new Border { Background = Card, CornerRadius = new CornerRadius(10), Padding = new Thickness(14, 6, 14, 6), Child = body });
+        Page.Children.Add(new Border { Background = Card, BorderBrush = Theme.Res("Line"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(2), Padding = new Thickness(14, 6, 14, 6), Child = body });
         return body;
     }
 
@@ -114,7 +126,7 @@ public partial class SettingsWindow : Window
         var row = new Grid { MinHeight = 40 };
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 6, 12, 6) };
         text.Children.Add(new TextBlock { Text = label, FontSize = 13 });
-        if (hint != null) text.Children.Add(new TextBlock { Text = hint, FontSize = 11, Opacity = 0.65, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 0) });
+        if (hint != null) text.Children.Add(new TextBlock { Text = hint, FontFamily = Theme.Mono, FontSize = 10, Opacity = 0.55, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 0) });
         row.Children.Add(text);
         return row;
     }
@@ -123,6 +135,7 @@ public partial class SettingsWindow : Window
     {
         var row = Line(label, hint);
         var toggle = new ToggleSwitch(value) { HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+        ((FrameworkElement)row.Children[0]).Margin = new Thickness(0, 6, 56, 6); // long hints wrap before the switch
         toggle.Toggled += v => { change(v); _s.Save(); };
         row.Children.Add(toggle);
         into.Children.Add(row);
@@ -135,7 +148,7 @@ public partial class SettingsWindow : Window
         row.ColumnDefinitions.Add(new ColumnDefinition());
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(58) });
         var slider = new VolumeSlider(() => (float)((get() - min) / (max - min)), v => { set(min + v * (max - min)); _s.Save(); }) { VerticalAlignment = VerticalAlignment.Center };
-        var value = new TextBlock { FontSize = 12, Foreground = Dim, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+        var value = new TextBlock { FontFamily = Theme.Mono, FontSize = 11, Foreground = Dim, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
         slider.Changed += (_, _) => value.Text = format(get());
         slider.Loaded += (_, _) => slider.Refresh();
         Grid.SetColumn(slider, 1);
@@ -157,13 +170,14 @@ public partial class SettingsWindow : Window
             int index = i;
             var chip = new Border
             {
-                CornerRadius = new CornerRadius(8), Padding = new Thickness(6, 6, 6, 6), Margin = new Thickness(2, 4, 2, 4), Cursor = Cursors.Hand,
+                CornerRadius = new CornerRadius(2), Padding = new Thickness(6, 5, 6, 5), Margin = new Thickness(2, 4, 2, 4), Cursor = Cursors.Hand,
+                BorderBrush = Theme.Res("Line"), BorderThickness = new Thickness(1),
                 Background = i == selected ? Selected : Brushes.Transparent,
-                Child = new TextBlock { Text = options[i], FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis },
+                Child = new TextBlock { Text = options[i].ToUpperInvariant(), FontFamily = Theme.Mono, FontSize = 10, Foreground = i == selected ? Ink : Brushes.White, HorizontalAlignment = HorizontalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis },
             };
             chip.MouseLeftButtonUp += (_, _) =>
             {
-                foreach (Border c in chips.Children) c.Background = c == chip ? Selected : Brushes.Transparent;
+                foreach (Border c in chips.Children) { c.Background = c == chip ? Selected : Brushes.Transparent; ((TextBlock)c.Child).Foreground = c == chip ? Ink : Brushes.White; }
                 apply(index);
                 _s.Save();
             };
@@ -178,9 +192,10 @@ public partial class SettingsWindow : Window
     {
         var button = new Button
         {
-            Style = (Style)FindResource("IconButton"), Padding = new Thickness(14, 7, 14, 7), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center,
-            Background = accent ? Theme.AccentBrush : Selected,
-            Content = new TextBlock { Text = text, FontFamily = (FontFamily)FindResource("Ui"), FontSize = 12 },
+            Style = (Style)FindResource("Key"), Padding = new Thickness(12, 6, 12, 6), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center,
+            Background = accent ? Theme.AccentBrush : Brushes.Transparent,
+            Foreground = accent ? Ink : Brushes.White,
+            Content = new TextBlock { Text = text.ToUpperInvariant(), FontFamily = Theme.Mono, FontSize = 10.5 },
         };
         button.Click += (_, _) => click();
         return button;
@@ -216,10 +231,10 @@ public partial class SettingsWindow : Window
         Pick(themes, "Vorlage", Theme.Presets.Select(p => p.Name).ToArray(), Array.FindIndex(Theme.Presets, p => p.Accent == _s.AccentColor && p.Island == _s.IslandColor), i => { Theme.UsePreset(i); Reload(); });
 
         var style = Section("Stil");
-        Pick(style, "Akzentfarbe", new[] { "Blau", "Hellblau", "Grau", "Weiß" }, Array.IndexOf(Theme.AccentColors, _s.AccentColor), i => { _s.AccentColor = Theme.AccentColors[i]; Theme.ApplyAll(); Reload(); });
+        Pick(style, "Akzentfarbe", new[] { "Weiß", "Grün", "Rot", "Bernstein" }, Array.IndexOf(Theme.AccentColors, _s.AccentColor), i => { _s.AccentColor = Theme.AccentColors[i]; Theme.ApplyAll(); Reload(); });
         Pick(style, "Schrift", Theme.Fonts.Select(f => f.Label).ToArray(), Array.FindIndex(Theme.Fonts, f => f.Family == _s.FontFamily), i => { _s.FontFamily = Theme.Fonts[i].Family; Theme.ApplyFont(); });
         Pick(style, "Rand", new[] { "Keiner", "Dezent", "Akzent", "Lichtlauf" }, _s.RimStyle, i => { _s.RimStyle = i; Theme.ApplyAll(); });
-        Pick(style, "Oberfläche", new[] { "Glatt", "Glas-Körnung" }, _s.Grain ? 1 : 0, i => { _s.Grain = i == 1; Theme.ApplyAll(); });
+        Pick(style, "Oberfläche", new[] { "Glatt", "Punktraster" }, _s.Grain ? 1 : 0, i => { _s.Grain = i == 1; Theme.ApplyAll(); });
         Pick(style, "Animationen", new[] { "Schnell", "Normal", "Aus" }, _s.AnimationSpeed, i => _s.AnimationSpeed = i);
     }
 
@@ -295,10 +310,10 @@ public partial class SettingsWindow : Window
         save.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var name = new TextBox
         {
-            Text = "Mein Theme", FontSize = 12, Foreground = Brushes.White, CaretBrush = Brushes.White, BorderThickness = new Thickness(0), Padding = new Thickness(8, 6, 8, 6),
+            Text = "Mein Theme", FontFamily = Theme.Mono, FontSize = 12, Foreground = Brushes.White, CaretBrush = Brushes.White, BorderThickness = new Thickness(0), Padding = new Thickness(8, 6, 8, 6),
             Background = Brushes.Transparent, VerticalContentAlignment = VerticalAlignment.Center,
         };
-        var field = new Border { Background = Selected, CornerRadius = new CornerRadius(8), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0), Child = name };
+        var field = new Border { Background = Field, BorderBrush = Theme.Res("LineHi"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(2), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0), Child = name };
         var store = Action("Speichern", () =>
         {
             if (string.IsNullOrWhiteSpace(name.Text)) return;

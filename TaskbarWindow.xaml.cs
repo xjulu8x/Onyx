@@ -15,7 +15,7 @@ namespace DesktopOverlay;
 public partial class TaskbarWindow : Window
 {
     private const uint ABM_NEW = 0, ABM_REMOVE = 1, ABM_QUERYPOS = 2, ABM_SETPOS = 3, ABE_BOTTOM = 3, ABN_FULLSCREENAPP = 2;
-    private static readonly Brush HoverBrush = new SolidColorBrush(Color.FromArgb(0x26, 255, 255, 255));
+    private static readonly Brush HoverBrush = new SolidColorBrush(Color.FromArgb(0x1A, 255, 255, 255));
     private static readonly Brush NoBrush = new SolidColorBrush(Color.FromArgb(0x01, 0, 0, 0));
 
     private IntPtr _hwnd;
@@ -488,11 +488,11 @@ public partial class TaskbarWindow : Window
     {
         // Indicator style: 0 line, 1 dot, 2 glowing line, 3 none
         int style = Settings.Current.IndicatorStyle;
-        double width = !running || style == 3 ? 0 : style == 1 ? 5 : active ? 16 : 6;
+        double width = !running || style == 3 ? 0 : style == 1 ? 4 : active ? 14 : 5;
         if (btn.Indicator.Width != width || btn.Active != active)
             btn.Indicator.BeginAnimation(WidthProperty, new DoubleAnimation(width, Theme.Ms(220)) { EasingFunction = Smooth });
-        btn.Indicator.Height = style == 1 ? 5 : 3;
-        btn.Indicator.CornerRadius = new CornerRadius(style == 1 ? 2.5 : 1.5);
+        btn.Indicator.Height = style == 1 ? 4 : 2;
+        btn.Indicator.CornerRadius = new CornerRadius(0); // terminal look: square marks
         btn.Indicator.Background = active ? Theme.AccentBrush : IdleDot;
         btn.Indicator.Effect = style == 2 && active ? new System.Windows.Media.Effects.DropShadowEffect { Color = Theme.Accent, BlurRadius = 10, ShadowDepth = 0 } : null;
         if (btn.Active == active) return;
@@ -516,14 +516,14 @@ public partial class TaskbarWindow : Window
         grid.Children.Add(img);
         btn.Indicator = new Border
         {
-            Width = 0, Height = 3, CornerRadius = new CornerRadius(1.5), Background = IdleDot,
+            Width = 0, Height = 2, CornerRadius = new CornerRadius(0), Background = IdleDot,
             VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 1),
         };
         grid.Children.Add(btn.Indicator);
 
         btn.Root = new Border
         {
-            Width = 46, Height = Settings.Current.TaskbarHeight - 6, CornerRadius = new CornerRadius(12), Margin = new Thickness(1, 0, 1, 0),
+            Width = 46, Height = Settings.Current.TaskbarHeight - 6, CornerRadius = new CornerRadius(2), Margin = new Thickness(1, 0, 1, 0),
             Background = NoBrush, Child = grid, ToolTip = app.Name, Tag = false,
         };
         btn.Root.MouseEnter += Hover_Enter;

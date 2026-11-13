@@ -9,7 +9,7 @@ namespace DesktopOverlay;
 
 public partial class IslandWindow : Window
 {
-    private const double ExpandedW = 820, ExpandedH = 330, ExpandedRadius = 24;
+    private const double ExpandedW = 820, ExpandedH = 330, ExpandedRadius = 24; // scaled by IslandCorners (0.3 in the terminal look)
     private const double WindowW = 900, WindowH = 380; // room for the open panel and its spring
     private static bool Capsule => Settings.Current.IslandShape == 2;
     private double CompactW => (Capsule ? 200 : 260) + (_flash != null ? 70 : 0); // wider while a hint shows
@@ -127,9 +127,11 @@ public partial class IslandWindow : Window
 
     private static readonly IEasingFunction OutEase = Theme.Settle;
     private readonly ScaleTransform _contentScale = new(1, 1);
-    private static readonly Brush Card = new SolidColorBrush(Color.FromArgb(0x10, 255, 255, 255));
-    private static readonly Brush CardHover = new SolidColorBrush(Color.FromArgb(0x1C, 255, 255, 255));
-    private static readonly Brush TabOn = new SolidColorBrush(Color.FromArgb(0x24, 255, 255, 255));
+    private static readonly Brush Card = new SolidColorBrush(Color.FromArgb(0x0C, 255, 255, 255));
+    private static readonly Brush CardHover = new SolidColorBrush(Color.FromArgb(0x16, 255, 255, 255));
+    private static readonly Brush TabOn = new SolidColorBrush(Color.FromRgb(0xE6, 0xE6, 0xE6));
+    private static readonly Brush TabText = new SolidColorBrush(Color.FromRgb(0xE6, 0xE6, 0xE6));
+    private static readonly Brush TabTextOn = new SolidColorBrush(Color.FromRgb(0x0A, 0x0A, 0x0A));
     private int _page;
 
     private void BuildPanel()
@@ -137,14 +139,13 @@ public partial class IslandWindow : Window
         Expanded.RenderTransform = _contentScale;
         Expanded.RenderTransformOrigin = new Point(0.5, 0);
 
-        var tabs = new (string Glyph, string Label)[] { ("", "Start"), ("", "Steuerung"), ("", "Mitteilungen") };
+        var tabs = new[] { "Start", "Steuerung", "Mitteilungen" };
+        // Terminal tabs: "1 START  2 STEUERUNG  3 MITTEILUNGEN", the open one inverted.
         for (int i = 0; i < tabs.Length; i++)
         {
             int index = i;
-            var content = new StackPanel { Orientation = Orientation.Horizontal };
-            content.Children.Add(new TextBlock { Text = tabs[i].Glyph, FontFamily = (FontFamily)FindResource("Icons"), FontSize = 14, VerticalAlignment = VerticalAlignment.Center });
-            content.Children.Add(new TextBlock { Text = tabs[i].Label, FontSize = 12, FontWeight = FontWeights.SemiBold, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
-            var tab = new Border { CornerRadius = new CornerRadius(15), Padding = new Thickness(12, 6, 14, 6), Margin = new Thickness(0, 0, 4, 0), Cursor = Cursors.Hand, Child = content, Background = Brushes.Transparent };
+            var label = new TextBlock { Text = $"{i + 1} {tabs[i].ToUpperInvariant()}", FontFamily = Theme.Mono, FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
+            var tab = new Border { CornerRadius = new CornerRadius(2), Padding = new Thickness(8, 4, 8, 4), Margin = new Thickness(0, 0, 6, 0), Cursor = Cursors.Hand, Child = label, Background = Brushes.Transparent, VerticalAlignment = VerticalAlignment.Center };
             Press(tab);
             tab.MouseLeftButtonUp += (_, _) => ShowPage(index);
             Tabs.Children.Add(tab);
@@ -155,8 +156,8 @@ public partial class IslandWindow : Window
         {
             var row = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
             row.Children.Add(new TextBlock { Text = glyph, FontFamily = (FontFamily)FindResource("Icons"), FontSize = 15, Width = 22, VerticalAlignment = VerticalAlignment.Center });
-            row.Children.Add(new TextBlock { Text = label, FontSize = 12, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, MaxWidth = 100 });
-            var tile = new Border { Background = Card, CornerRadius = new CornerRadius(14), Margin = new Thickness(4), Padding = new Thickness(12, 0, 8, 0), Cursor = Cursors.Hand, Child = row };
+            row.Children.Add(new TextBlock { Text = label.ToUpperInvariant(), FontFamily = Theme.Mono, FontSize = 10, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, MaxWidth = 100 });
+            var tile = new Border { Background = Card, BorderBrush = Theme.Res("Line"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(2), Margin = new Thickness(4), Padding = new Thickness(12, 0, 8, 0), Cursor = Cursors.Hand, Child = row };
             Hover(tile);
             Press(tile);
             tile.MouseLeftButtonUp += async (_, _) =>
@@ -181,8 +182,8 @@ public partial class IslandWindow : Window
             var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Bottom };
             stack.Children.Add(new TextBlock { Text = glyph, FontFamily = (FontFamily)FindResource("Icons"), FontSize = 18, Margin = new Thickness(0, 0, 0, 10) });
             stack.Children.Add(new TextBlock { Text = label, FontSize = 13, FontWeight = FontWeights.SemiBold });
-            stack.Children.Add(new TextBlock { Text = detail, FontSize = 11, Foreground = (Brush)FindResource("Dim"), Margin = new Thickness(0, 2, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis });
-            var tile = new Border { Background = Card, CornerRadius = new CornerRadius(16), Margin = new Thickness(4), Padding = new Thickness(14, 12, 14, 12), Cursor = Cursors.Hand, Child = stack };
+            stack.Children.Add(new TextBlock { Text = detail.ToUpperInvariant(), FontFamily = Theme.Mono, FontSize = 9.5, Foreground = (Brush)FindResource("Dim"), Margin = new Thickness(0, 2, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis });
+            var tile = new Border { Background = Card, BorderBrush = Theme.Res("Line"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(2), Margin = new Thickness(4), Padding = new Thickness(14, 12, 14, 12), Cursor = Cursors.Hand, Child = stack };
             Hover(tile);
             Press(tile);
             tile.MouseLeftButtonUp += (_, _) => { SetExpanded(false); run(); };
@@ -209,7 +210,7 @@ public partial class IslandWindow : Window
         {
             var tab = (Border)Tabs.Children[i];
             tab.Background = i == index ? TabOn : Brushes.Transparent;
-            ((StackPanel)tab.Child).Children[1].Visibility = i == index ? Visibility.Visible : Visibility.Collapsed; // only the open tab shows its name
+            ((TextBlock)tab.Child).Foreground = i == index ? TabTextOn : TabText;
         }
         StartPage.Visibility = index == 0 ? Visibility.Visible : Visibility.Collapsed;
         ControlPage.Visibility = index == 1 ? Visibility.Visible : Visibility.Collapsed;
@@ -254,7 +255,7 @@ public partial class IslandWindow : Window
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(16) });
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(300) });
         layout.Children.Add(new ScrollViewer { Content = list, VerticalScrollBarVisibility = ScrollBarVisibility.Hidden, Focusable = false });
-        var card = new Border { Background = Card, CornerRadius = new CornerRadius(16), Padding = new Thickness(14, 0, 14, 10), Child = calendar, VerticalAlignment = VerticalAlignment.Top };
+        var card = new Border { Background = Card, BorderBrush = Theme.Res("Line"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(2), Padding = new Thickness(14, 0, 14, 10), Child = calendar, VerticalAlignment = VerticalAlignment.Top };
         Grid.SetColumn(card, 2);
         layout.Children.Add(card);
         return layout;
@@ -268,8 +269,8 @@ public partial class IslandWindow : Window
 
     private static void Hover(Border tile)
     {
-        tile.MouseEnter += (_, _) => tile.Background = CardHover;
-        tile.MouseLeave += (_, _) => tile.Background = Card;
+        tile.MouseEnter += (_, _) => { tile.Background = CardHover; tile.BorderBrush = Theme.Res("LineHi"); };
+        tile.MouseLeave += (_, _) => { tile.Background = Card; tile.BorderBrush = Theme.Res("Line"); };
     }
 
     /// <summary>Feedback on press, not on release: a quick, slight shrink that springs back.</summary>
@@ -352,7 +353,7 @@ public partial class IslandWindow : Window
         if (!artKey.Equals(_artKey))
         {
             _artKey = artKey;
-            var cover = new Border { Width = 120, Height = 120, CornerRadius = new CornerRadius(14), Background = _media.HasSession && _media.Art != null ? new ImageBrush(_media.Art) { Stretch = Stretch.UniformToFill } : new SolidColorBrush(Color.FromArgb(0x1F, 255, 255, 255)) };
+            var cover = new Border { Width = 120, Height = 120, CornerRadius = new CornerRadius(2), Background = _media.HasSession && _media.Art != null ? new ImageBrush(_media.Art) { Stretch = Stretch.UniformToFill } : new SolidColorBrush(Color.FromArgb(0x1F, 255, 255, 255)) };
             if (_media.Art == null) cover.Child = new TextBlock { Text = "", FontFamily = (FontFamily)FindResource("Icons"), FontSize = 30, Foreground = Brushes.White, Opacity = 0.65, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
             art = Render(cover, 120, 120);
         }
@@ -360,7 +361,9 @@ public partial class IslandWindow : Window
         if (smallKey != _smallKey)
         {
             _smallKey = smallKey;
-            small = Render(Text(CompactTitle.Text, 12, FontWeights.SemiBold, 1), CompactW - 24 - 22 - 42, 18);
+            var title = Text(CompactTitle.Text.ToUpperInvariant(), 11, FontWeights.Bold, 1);
+            title.FontFamily = Theme.Mono;
+            small = Render(title, CompactW - 24 - 22 - 42, 18);
         }
         string bigKey = TitleText.Text + "|" + Artist.Text + font;
         if (bigKey != _bigKey)
@@ -368,7 +371,9 @@ public partial class IslandWindow : Window
             _bigKey = bigKey;
             var both = new StackPanel();
             both.Children.Add(Text(TitleText.Text, 14, FontWeights.Bold, 1));
-            var artist = Text(Artist.Text, 11, FontWeights.SemiBold, 0.65);
+            both.Children[0].SetValue(TextBlock.FontSizeProperty, 15.0);
+            var artist = Text(Artist.Text, 11, FontWeights.Normal, 0.6);
+            artist.FontFamily = Theme.Mono;
             artist.Margin = new Thickness(0, 3, 0, 0);
             both.Children.Add(artist);
             big = Render(both, 284, 40);
@@ -427,7 +432,7 @@ public partial class IslandWindow : Window
         Compact.Height = CompactH;
         Compact.Width = CompactW - 24;
         CompactArt.Width = CompactArt.Height = Capsule ? 28 : 22;
-        CompactArt.CornerRadius = new CornerRadius(Capsule ? 14 : 6);
+        CompactArt.CornerRadius = new CornerRadius(Capsule ? 14 : 2);
         SizeContent();
         IslandRoot.LayoutTransform = new ScaleTransform(s.IslandScale, s.IslandScale);
         Width = WindowW * s.IslandScale;
@@ -449,7 +454,7 @@ public partial class IslandWindow : Window
         el.BeginAnimation(prop, new DoubleAnimation(to, dur) { EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(delayMs) });
 
     private void ShowUpdateState() =>
-        GearBtn.Foreground = UpdateService.Available != null ? Theme.AccentBrush : Brushes.White;
+        GearBtn.Foreground = UpdateService.Available != null ? Theme.Res("Signal") : Theme.Res("Dim");
 
     private void Island_MouseEnter(object sender, MouseEventArgs e)
     {

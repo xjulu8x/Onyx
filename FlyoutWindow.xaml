@@ -18,12 +18,13 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="b" Background="#14FFFFFF" CornerRadius="14" Padding="10,8">
+                        <Border x:Name="b" Background="#0CFFFFFF" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="2" Padding="10,8">
                             <ContentPresenter VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="b" Property="Background" Value="#24FFFFFF"/>
+                                <Setter TargetName="b" Property="Background" Value="#16FFFFFF"/>
+                                <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource LineHi}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="b" Property="Background" Value="#33FFFFFF"/>
@@ -40,7 +41,7 @@
         </Style>
     </Window.Resources>
 
-    <Border x:Name="Panel" Margin="10" CornerRadius="24" Background="{StaticResource GlassPanel}" BorderBrush="{StaticResource GlassRim}" BorderThickness="1"
+    <Border x:Name="Panel" Margin="10" CornerRadius="3" Background="{StaticResource GlassPanel}" BorderBrush="{StaticResource GlassRim}" BorderThickness="1"
             Padding="18">
         <Border.RenderTransform>
             <TransformGroup>

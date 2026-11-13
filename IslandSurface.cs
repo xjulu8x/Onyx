@@ -105,7 +105,7 @@ internal sealed class IslandSurface
         _pill.Children.InsertAtTop(_tint);
 
         var sheen = _compositor.CreateSpriteVisual();
-        sheen.Brush = Gradient(Color.FromArgb(0x12, 255, 255, 255), Color.FromArgb(0, 255, 255, 255), 0.5f);
+        sheen.Brush = _compositor.CreateColorBrush(Color.FromArgb(0, 255, 255, 255)); // terminal look: flat, no sheen
         sheen.RelativeSizeAdjustment = Vector2.One;
         _pill.Children.InsertAtTop(sheen);
 
@@ -137,7 +137,7 @@ internal sealed class IslandSurface
         var edge = _compositor.CreateShapeVisual();
         edge.RelativeSizeAdjustment = Vector2.One;
         _rim = _compositor.CreateSpriteShape(_shape);
-        _rim.StrokeThickness = 2; // half of it is clipped away, which keeps the edge crisp
+        _rim.StrokeThickness = 2; // 1 px visible // half of it is clipped away, which keeps the edge crisp
         edge.Shapes.Add(_rim);
         _pill.Children.InsertAtTop(edge);
 
@@ -271,8 +271,8 @@ internal sealed class IslandSurface
     {
         byte alpha = (byte)(255 * Math.Min(1, opacity * (_blur ? 0.6 : 1.03))); // without blur: as solid as the iPhone island at the default 97 % // always a little see-through: that is the glass
         _tint.Brush = _compositor.CreateColorBrush(Color.FromArgb(alpha, tint.R, tint.G, tint.B));
-        var top = rim ?? System.Windows.Media.Color.FromRgb(255, 255, 255);
-        _rim.StrokeBrush = Gradient(Color.FromArgb(rim == null ? (byte)0x50 : (byte)0xC0, top.R, top.G, top.B), Color.FromArgb(rim == null ? (byte)0x10 : (byte)0x50, top.R, top.G, top.B));
+        var line = rim ?? System.Windows.Media.Color.FromRgb(0x3A, 0x3A, 0x3A);
+        _rim.StrokeBrush = _compositor.CreateColorBrush(Color.FromArgb(0xFF, line.R, line.G, line.B)); // one thin even line, like the widgets
     }
 
     public void SetGlow(float opacity) => _glow.Opacity = opacity;
@@ -305,9 +305,9 @@ internal sealed class IslandSurface
         for (int i = 0; i < _bars.Length; i++)
         {
             var bar = _bars[i];
-            bar.Size = new Vector2(3 * scale, 14 * scale);
-            bar.Offset = new Vector3(i * 5 * scale, 0, 0);
-            bar.CenterPoint = new Vector3(1.5f * scale, 7 * scale, 0);
+            bar.Size = new Vector2(2 * scale, 12 * scale);
+            bar.Offset = new Vector3(i * 4 * scale, 1 * scale, 0);
+            bar.CenterPoint = new Vector3(1 * scale, 12 * scale, 0); // bars grow from the bottom, like a level meter
         }
         bool move = playing && visible;
         if (move == _barsMoving && _barsStarted) return;

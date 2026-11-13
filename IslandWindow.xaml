@@ -19,12 +19,12 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <Border x:Name="CompactArt" Width="22" Height="22" CornerRadius="6" Background="#22FFFFFF">
+                    <Border x:Name="CompactArt" Width="22" Height="22" CornerRadius="2" Background="#22FFFFFF">
                         <TextBlock x:Name="CompactArtIcon" Text="&#xE8D6;" FontFamily="{StaticResource Icons}" FontSize="11"
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <TextBlock x:Name="CompactTitle" Grid.Column="1" Margin="9,0" VerticalAlignment="Center"
-                               FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                               FontFamily="{StaticResource Mono}" FontSize="11" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
                     <!-- Room for the equalizer, which the surface draws on the GPU -->
                     <Border Grid.Column="2" Width="24"/>
                 </Grid>
@@ -56,14 +56,14 @@
                                 <RowDefinition Height="46"/>
                             </Grid.RowDefinitions>
 
-                            <Border Background="#10FFFFFF" CornerRadius="16" Padding="14">
+                            <Border Background="{StaticResource Card}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="2" Padding="14">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="120"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <!-- Cover and title are drawn by the surface; these stay as click target and fallback -->
-                                    <Border x:Name="Art" Width="120" Height="120" VerticalAlignment="Top" CornerRadius="14" Background="#1FFFFFFF" Cursor="Hand" MouseLeftButtonUp="Art_Click">
+                                    <Border x:Name="Art" Width="120" Height="120" VerticalAlignment="Top" CornerRadius="2" Background="#1FFFFFFF" Cursor="Hand" MouseLeftButtonUp="Art_Click">
                                         <TextBlock x:Name="ArtIcon" Text="&#xE8D6;" FontFamily="{StaticResource Icons}" FontSize="30"
                                                    Foreground="{StaticResource Dim}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
@@ -76,15 +76,15 @@
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
                                         </Grid.RowDefinitions>
-                                        <TextBlock x:Name="SourceText" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource Dim}"/>
+                                        <TextBlock x:Name="SourceText" Style="{StaticResource Tag}" TextTrimming="CharacterEllipsis"/>
                                         <StackPanel Grid.Row="1">
-                                            <TextBlock x:Name="TitleText" Text="Nichts wird abgespielt" FontSize="14" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
-                                            <TextBlock x:Name="Artist" FontSize="11" FontWeight="SemiBold" Margin="0,3,0,0" Foreground="{StaticResource Dim}" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock x:Name="TitleText" Text="Nichts wird abgespielt" FontSize="15" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock x:Name="Artist" FontFamily="{StaticResource Mono}" FontSize="11" Margin="0,3,0,0" Foreground="{StaticResource Dim}" TextTrimming="CharacterEllipsis"/>
                                         </StackPanel>
                                         <ProgressBar x:Name="Progress" Grid.Row="3" Style="{StaticResource Bar}" Height="3"/>
                                         <Grid Grid.Row="4" Margin="0,5,0,0">
-                                            <TextBlock x:Name="PosText" Text="0:00" FontSize="10" FontWeight="SemiBold"/>
-                                            <TextBlock x:Name="DurText" Text="0:00" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Right"/>
+                                            <TextBlock x:Name="PosText" Text="0:00" Style="{StaticResource Tag}"/>
+                                            <TextBlock x:Name="DurText" Text="0:00" Style="{StaticResource Tag}" HorizontalAlignment="Right"/>
                                         </Grid>
                                         <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,4,0,-4">
                                             <Button Style="{StaticResource IconButton}" Content="&#xE892;" FontSize="15" Padding="10,6" Click="Prev_Click"/>
@@ -95,7 +95,7 @@
                                 </Grid>
                             </Border>
 
-                            <Border Grid.Row="2" Background="#10FFFFFF" CornerRadius="14" Padding="10,0,14,0">
+                            <Border Grid.Row="2" Background="{StaticResource Card}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="2" Padding="10,0,14,0">
                                 <Grid VerticalAlignment="Center">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
@@ -105,8 +105,8 @@
                                     </Grid.ColumnDefinitions>
                                     <Button x:Name="MuteBtn" Style="{StaticResource IconButton}" Content="&#xE767;" FontSize="13" Padding="6,3" Margin="0,0,6,0" Click="Mute_Click"/>
                                     <local:VolumeSlider x:Name="VolSlider" Grid.Column="1"/>
-                                    <TextBlock x:Name="VolText" Grid.Column="2" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                                    <TextBlock x:Name="OutputText" Grid.Column="3" FontSize="11" Foreground="{StaticResource Dim}" Margin="10,0,0,0" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="VolText" Grid.Column="2" FontFamily="{StaticResource Mono}" FontSize="11" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="OutputText" Grid.Column="3" Style="{StaticResource Tag}" Margin="10,0,0,0" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
                                 </Grid>
                             </Border>
 
@@ -121,9 +121,9 @@
                                 <RowDefinition Height="56"/>
                             </Grid.RowDefinitions>
                             <UniformGrid x:Name="ControlTiles" Margin="-4,-4,-4,0" Columns="4" Rows="2"/>
-                            <Border Grid.Row="2" Background="#10FFFFFF" CornerRadius="14" Padding="14,0">
+                            <Border Grid.Row="2" Background="{StaticResource Card}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="2" Padding="14,0">
                                 <Grid>
-                                    <TextBlock Text="Hintergrund-Apps" FontSize="11" Foreground="{StaticResource Dim}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="HINTERGRUND-APPS" Style="{StaticResource Tag}" VerticalAlignment="Center"/>
                                     <WrapPanel x:Name="TrayIcons" Margin="120,0,0,0" VerticalAlignment="Center"/>
                                 </Grid>
                             </Border>

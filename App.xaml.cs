@@ -56,6 +56,17 @@ public partial class App : Application
 
         // 2.0: the island hangs as a notch at the top edge, and the taskbar is a dock with apps only.
         if (Settings.Current.Layout < 2) { Settings.Current.IslandShape = 1; Settings.Current.TaskbarShape = 1; Settings.Current.Layout = 2; Settings.Current.Save(); }
+        // 2.2: terminal look: flat dark sheets, thin lines, dot grid, almost square corners. The glass look is gone.
+        if (Settings.Current.Layout < 3)
+        {
+            var s = Settings.Current;
+            Theme.UsePresetValues(0);
+            (s.TaskbarRadius, s.IslandCorners, s.RimStyle, s.Grain, s.IndicatorStyle, s.IconTint) = (4, 0.3, 1, true, 1, 0);
+            s.FontFamily = Theme.Fonts[0].Family;
+            (s.DayTheme, s.NightTheme) = ("Mono", "Mono");
+            s.Layout = 3;
+            s.Save();
+        }
         Theme.ApplyFont();
         Island = new IslandWindow();
         Island.Show();

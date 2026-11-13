@@ -72,6 +72,7 @@ public partial class StatsWindow : Window
     // ---------- single widgets ----------
 
     private readonly List<Window> _parts = new();
+    private static readonly Dictionary<string, string> Names = new() { ["Net"] = "NETZ", ["Gpu"] = "GPU", ["Cpu"] = "CPU", ["Ram"] = "RAM", ["Disks"] = "DISKS" };
 
     /// <summary>The separate widgets while "Einzeln" is on; otherwise empty.</summary>
     public IReadOnlyList<Window> Parts => _parts;
@@ -83,22 +84,21 @@ public partial class StatsWindow : Window
         if (free == _parts.Count > 0) return;
         var blocks = new (FrameworkElement Block, string Key, Thickness Margin)[]
         {
-            (Net, "Net", new Thickness(10, 0, 0, 0)), (GpuBlock, "Gpu", new Thickness(0, 40, 0, 16)), (CpuBlock, "Cpu", new Thickness(0)),
-            (RamBlock, "Ram", new Thickness(0, 18, 0, 0)), (DiskList, "Disks", new Thickness(0, 18, 0, 0)),
+            (Net, "Net", new Thickness(0)), (GpuBlock, "Gpu", new Thickness(0, 18, 0, 14)), (CpuBlock, "Cpu", new Thickness(0)),
+            (RamBlock, "Ram", new Thickness(0, 14, 0, 0)), (DiskList, "Disks", new Thickness(0, 14, 0, 0)),
         };
         if (!free)
         {
             foreach (var part in _parts)
             {
                 WidgetMover.Detach(part);
-                ((Border)part.Content).Child = null;
+                ((DockPanel)((Border)part.Content).Child).Children.RemoveAt(1);
                 part.Close();
             }
             _parts.Clear();
             foreach (var (block, _, margin) in blocks)
             {
                 block.Margin = margin;
-                block.Effect = null;
                 Blocks.Children.Add(block);
             }
             return;
@@ -110,12 +110,19 @@ public partial class StatsWindow : Window
         {
             Blocks.Children.Remove(block);
             block.Margin = new Thickness(0);
-            block.Effect = (System.Windows.Media.Effects.Effect)FindResource("TextShadow");
+            // Every part is a framed widget of its own, with a caption like "+ CPU / 03".
+            var body = new DockPanel();
+            var caption = Theme.Tag($"+ {Names[key]} / {_parts.Count + 1:00}");
+            caption.Margin = new Thickness(0, 0, 0, 10);
+            DockPanel.SetDock(caption, Dock.Top);
+            body.Children.Add(caption);
+            body.Children.Add(block);
             var part = new Window
             {
                 Title = "Stats-" + key, Tag = "wide", Width = width, SizeToContent = SizeToContent.Height, Left = left, Top = y,
                 WindowStyle = WindowStyle.None, AllowsTransparency = true, Background = Brushes.Transparent, ShowInTaskbar = false, ResizeMode = ResizeMode.NoResize,
-                Foreground = Foreground, Content = new Border { Padding = new Thickness(10), Child = block },
+                Foreground = Foreground,
+                Content = new Border { Background = Frame.Background, BorderBrush = Frame.BorderBrush, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(2), Padding = new Thickness(14, 10, 14, 12), Child = body },
             };
             part.SetResourceReference(FontFamilyProperty, "Ui");
             TextOptions.SetTextRenderingMode(part, TextRenderingMode.Grayscale);
@@ -124,7 +131,7 @@ public partial class StatsWindow : Window
             _parts.Add(part);
             part.Show();
             part.UpdateLayout();
-            y += part.ActualHeight;
+            y += part.ActualHeight + 8;
         }
     }
 
@@ -161,16 +168,16 @@ public partial class StatsWindow : Window
         foreach (var d in _sys.Disks)
         {
             var g = new Grid { Margin = new Thickness(0, 0, 0, 8) };
-            g.Children.Add(new TextBlock { Text = d.Name, FontSize = 13, FontWeight = FontWeights.Normal });
+            g.Children.Add(new TextBlock { Text = d.Name.ToUpperInvariant(), FontFamily = Theme.Mono, FontSize = 10, Opacity = 0.7 });
             g.Children.Add(new TextBlock
             {
-                Text = $"{d.FreeGB:0.0} GB frei / {d.TotalGB:0.0} GB", FontSize = 12, FontWeight = FontWeights.Normal,
+                Text = $"{d.FreeGB:0} / {d.TotalGB:0} GB FREI", FontFamily = Theme.Mono, FontSize = 10,
                 HorizontalAlignment = HorizontalAlignment.Right,
             });
             g.Children.Add(new ProgressBar
             {
-                Style = (Style)FindResource("Bar"), Height = 3, Value = d.UsedFraction, Foreground = Foreground,
-                Margin = new Thickness(0, 21, 0, 0), VerticalAlignment = VerticalAlignment.Top,
+                Style = (Style)FindResource("Bar"), Height = 2, Value = d.UsedFraction, Foreground = Foreground,
+                Margin = new Thickness(0, 18, 0, 0), VerticalAlignment = VerticalAlignment.Top,
             });
             DiskList.Children.Add(g);
         }
