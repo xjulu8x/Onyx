@@ -256,20 +256,34 @@ internal sealed class IslandSurface
             move.DampingRatio = damping; move.Period = period; move.FinalValue = target;
             part.StartAnimation("Offset", move);
         }
-        Fly(_art, artAt);
+        // Turntable: open, the cover is the round label on a vinyl record with a tone arm; closed, it is a small round
+        // cover in the notch. Record, label and arm all move on the same spring.
+        float discSize = open ? artSize * 0.9f : artSize;
+        var discAt = open ? artAt + new Vector2(0, artSize * 0.05f) : artAt;
+        float labelSize = open ? discSize * 0.46f : artSize;
+        var labelAt = discAt + new Vector2((discSize - labelSize) / 2, (discSize - labelSize) / 2);
+        Fly(_art, labelAt);
+        if (_disc != null)
+        {
+            Fly(_disc, discAt);
+            Grow(_disc, new Vector2(discSize, discSize));
+            Fly(_arm, artAt + new Vector2(artSize * 0.9f, artSize * 0.08f) - _armPivot);
+            Fade(_disc, open ? 1 : 0, animate, open ? 40 : 0, open ? 180 : 100);
+            Fade(_arm, open ? 1 : 0, animate, open ? 120 : 0, open ? 200 : 80);
+        }
         Fly(_smallText, textAt);
         Fly(_smallTextB, textAt);
         _open = open;
         Fly(_bigText, textAt);
 
-        var size = new Vector2(artSize, artSize);
-        if (animate)
+        Grow(_art, new Vector2(labelSize, labelSize));
+        void Grow(SpriteVisual part, Vector2 size)
         {
+            if (!animate) { part.StopAnimation("Size"); part.Size = size; return; }
             var grow = _compositor.CreateSpringVector2Animation();
             grow.DampingRatio = damping; grow.Period = period; grow.FinalValue = size;
-            _art.StartAnimation("Size", grow);
+            part.StartAnimation("Size", grow);
         }
-        else { _art.StopAnimation("Size"); _art.Size = size; }
 
         Fade(_smallFront, open ? 0 : 1, animate, open ? 0 : 120, open ? 110 : 180);
         var back = _smallFront == _smallText ? _smallTextB : _smallText;
@@ -346,6 +360,73 @@ internal sealed class IslandSurface
         _dots.Brush = brush;
     }
 
+    // ---------- turntable ----------
+
+    private SpriteVisual _disc, _arm;
+    private Vector2 _armPivot;
+    private bool _spinStarted;
+
+    /// <summary>
+    /// Makes the cover a round record label that can spin, and adds the record and the tone arm (images in device
+    /// pixels; pivot = where the arm turns, in arm image pixels). Called once, again when the size changes.
+    /// </summary>
+    public void SetTurntable(System.Windows.Media.Imaging.BitmapSource disc, System.Windows.Media.Imaging.BitmapSource arm, Vector2 pivot)
+    {
+        if (!MediaReady) return;
+        try
+        {
+            if (_disc == null)
+            {
+                _disc = _compositor.CreateSpriteVisual();
+                _arm = _compositor.CreateSpriteVisual();
+                _disc.Opacity = _arm.Opacity = 0;
+                _pill.Children.InsertBelow(_disc, _art);
+                _pill.Children.InsertAbove(_arm, _art);
+                // Round label: an ellipse clip that follows the size of the cover, and the turning point in its middle.
+                var circle = _compositor.CreateEllipseGeometry();
+                var middle = _compositor.CreateExpressionAnimation("Vector2(art.Size.X / 2, art.Size.Y / 2)");
+                middle.SetReferenceParameter("art", _art);
+                circle.StartAnimation("Center", middle);
+                circle.StartAnimation("Radius", middle);
+                _art.Clip = _compositor.CreateGeometricClip(circle);
+                var centre = _compositor.CreateExpressionAnimation("Vector3(art.Size.X / 2, art.Size.Y / 2, 0)");
+                centre.SetReferenceParameter("art", _art);
+                _art.StartAnimation("CenterPoint", centre);
+            }
+            var discBrush = Upload(disc);
+            _disc.Brush = discBrush;
+            var armBrush = Upload(arm);
+            armBrush.Stretch = CompositionStretch.None;
+            _arm.Brush = armBrush;
+            _arm.Size = new Vector2(arm.PixelWidth, arm.PixelHeight);
+            _armPivot = pivot;
+            _arm.CenterPoint = new Vector3(pivot, 0);
+        }
+        catch (Exception e) { App.Log(e); }
+    }
+
+    /// <summary>Playing: the label turns (33 rpm look) and the arm swings onto the record; paused: both rest where they are.</summary>
+    public void SetSpinning(bool playing)
+    {
+        if (_disc == null) return;
+        if (!_spinStarted)
+        {
+            _spinStarted = true;
+            var turn = _compositor.CreateScalarKeyFrameAnimation();
+            turn.InsertKeyFrame(0, 0);
+            turn.InsertKeyFrame(1, 360, _compositor.CreateLinearEasingFunction());
+            turn.Duration = TimeSpan.FromSeconds(1.8);
+            turn.IterationBehavior = AnimationIterationBehavior.Forever;
+            _art.StartAnimation("RotationAngleInDegrees", turn);
+        }
+        if (_art.TryGetAnimationController("RotationAngleInDegrees") is { } spin) { if (playing) spin.Resume(); else spin.Pause(); }
+        var swing = _compositor.CreateSpringScalarAnimation();
+        swing.DampingRatio = 0.75f;
+        swing.Period = TimeSpan.FromMilliseconds(90);
+        swing.FinalValue = playing ? 20 : -10;
+        _arm.StartAnimation("RotationAngleInDegrees", swing);
+    }
+
     /// <summary>New picture of the open panel (device pixels), placed centred at the top of the body.</summary>
     public void SetPanel(System.Windows.Media.Imaging.BitmapSource image, float top)
     {
@@ -410,7 +491,7 @@ internal sealed class IslandSurface
         _laser.StartAnimation("Offset", move);
         _laser.Opacity = 0;
         _root.Children.InsertAtTop(_laser);
-        foreach (var (thickness, segment, gap, period, reverse) in new[] { (8f, 90f, 210f, 3.2, false), (4f, 90f, 210f, 3.2, false), (1.6f, 90f, 210f, 3.2, false), (1.2f, 40f, 160f, 2.3, true), (3.5f, 40f, 160f, 2.3, true) })
+        foreach (var (thickness, segment, gap, period, reverse) in new[] { (18f, 120f, 180f, 3.2, false), (10f, 120f, 180f, 3.2, false), (5f, 120f, 180f, 3.2, false), (2.2f, 120f, 180f, 3.2, false), (6f, 60f, 140f, 2.3, true), (1.8f, 60f, 140f, 2.3, true) })
         {
             var beam = _compositor.CreateSpriteShape(_shape);
             beam.StrokeThickness = thickness;
@@ -437,7 +518,7 @@ internal sealed class IslandSurface
         _laserOn = on;
         if (_laser == null) return;
         Color Tint(byte alpha, double white) => Color.FromArgb(alpha, (byte)(color.R + (255 - color.R) * white), (byte)(color.G + (255 - color.G) * white), (byte)(color.B + (255 - color.B) * white));
-        var looks = new[] { Tint(0x2A, 0), Tint(0x70, 0.15), Tint(0xFF, 0.55), Tint(0xE0, 0.7), Tint(0x40, 0.2) };
+        var looks = new[] { Tint(0x22, 0), Tint(0x50, 0.1), Tint(0xA0, 0.3), Tint(0xFF, 0.7), Tint(0x60, 0.2), Tint(0xF0, 0.75) }; // wide halo, glow, beam, white-hot core; and a second beam the other way
         for (int i = 0; i < _beams.Count; i++) _beams[i].StrokeBrush = _compositor.CreateColorBrush(looks[i]);
         if (!on) { _laser.Opacity = 0; Rate(0); }
         ClipToPill(0);
@@ -448,7 +529,7 @@ internal sealed class IslandSurface
     {
         if (!_laserOn || _laser == null) return;
         if (level <= 0.001f) { _laser.Opacity = 0; Rate(0); return; } // silence: the lights rest
-        _laser.Opacity = Math.Clamp(0.25f + level * 0.9f + (beat ? 0.3f : 0), 0, 1);
+        _laser.Opacity = Math.Clamp(0.55f + level * 0.6f + (beat ? 0.25f : 0), 0, 1); // clearly visible all through the song, brighter when loud
         Rate(0.5f + level * 2.6f + (beat ? 1.5f : 0));
     }
 
@@ -463,6 +544,7 @@ internal sealed class IslandSurface
     {
         if (!MediaReady) return;
         _art.Opacity = visible ? 1 : 0;
+        if (_disc != null && !visible) { _disc.StopAnimation("Opacity"); _disc.Opacity = 0; _arm.StopAnimation("Opacity"); _arm.Opacity = 0; }
         if (!visible) { _bigText.StopAnimation("Opacity"); _bigText.Opacity = 0; }
     }
 
@@ -548,7 +630,7 @@ internal sealed class IslandSurface
     /// </summary>
     private void ClipToPill(float margin)
     {
-        if (_laserOn) margin = Math.Max(margin, 10); // room for the glow of the lights around the edge
+        if (_laserOn) margin = Math.Max(margin, 16); // room for the glow of the lights around the edge
         int w = (int)(_size.X + 2 * margin), h = (int)(_size.Y + _top + margin);
         int left = (_width - w) / 2;
         SetWindowRgn(_window.Handle, CreateRectRgn(left, 0, left + w, h), false);

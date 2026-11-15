@@ -181,6 +181,60 @@ public partial class IslandWindow
         RefreshActions();
     }
 
+    /// <summary>
+    /// Draws the vinyl record (black, fine grooves, a soft sheen, a ring around the label) and the tone arm
+    /// (pivot with counterweight, silver arm, head shell) for the GPU, at the screen's pixel size.
+    /// </summary>
+    private void SendTurntable()
+    {
+        double k = VisualTreeHelper.GetDpi(this).DpiScaleX * Settings.Current.IslandScale;
+        double d = 120 * 0.9 * k, r = d / 2;
+        var record = new DrawingVisual();
+        using (var g = record.RenderOpen())
+        {
+            var c = new Point(r, r);
+            g.DrawEllipse(new SolidColorBrush(Color.FromRgb(0x0D, 0x0D, 0x10)), null, c, r, r);
+            for (double gr = r * 0.5; gr < r * 0.97; gr += 1.6 * k)
+                g.DrawEllipse(null, new Pen(new SolidColorBrush(((int)(gr / k) % 3 == 0) ? Color.FromRgb(0x24, 0x24, 0x29) : Color.FromRgb(0x16, 0x16, 0x1A)), 0.7 * k), c, gr, gr);
+            g.DrawEllipse(null, new Pen(new SolidColorBrush(Color.FromRgb(0x30, 0x30, 0x36)), 1.4 * k), c, r - 0.7 * k, r - 0.7 * k);
+            // Light falling on the vinyl: two soft bands across it.
+            var sheen = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 1) };
+            sheen.GradientStops.Add(new GradientStop(Color.FromArgb(0, 255, 255, 255), 0.18));
+            sheen.GradientStops.Add(new GradientStop(Color.FromArgb(0x26, 255, 255, 255), 0.32));
+            sheen.GradientStops.Add(new GradientStop(Color.FromArgb(0, 255, 255, 255), 0.45));
+            sheen.GradientStops.Add(new GradientStop(Color.FromArgb(0, 255, 255, 255), 0.58));
+            sheen.GradientStops.Add(new GradientStop(Color.FromArgb(0x18, 255, 255, 255), 0.7));
+            sheen.GradientStops.Add(new GradientStop(Color.FromArgb(0, 255, 255, 255), 0.82));
+            g.DrawEllipse(sheen, null, c, r, r);
+            g.DrawEllipse(null, new Pen(new SolidColorBrush(Color.FromRgb(0x3A, 0x3A, 0x40)), 1 * k), c, r * 0.46 + 1.2 * k, r * 0.46 + 1.2 * k);
+        }
+        var disc = new System.Windows.Media.Imaging.RenderTargetBitmap((int)Math.Ceiling(d), (int)Math.Ceiling(d), 96, 96, PixelFormats.Pbgra32);
+        disc.Render(record);
+        disc.Freeze();
+
+        double w = 34 * k, h = 92 * k;
+        var pivot = new Point(22 * k, 13 * k);
+        var armVisual = new DrawingVisual();
+        using (var g = armVisual.RenderOpen())
+        {
+            var silver = new LinearGradientBrush(Color.FromRgb(0xE4, 0xE5, 0xEA), Color.FromRgb(0x86, 0x88, 0x90), 0);
+            g.DrawRectangle(new SolidColorBrush(Color.FromRgb(0x4A, 0x4A, 0x52)), null, new Rect(pivot.X - 4 * k, 1 * k, 8 * k, 6 * k)); // counterweight
+            var end = new Point(9 * k, 78 * k);
+            g.DrawLine(new Pen(new SolidColorBrush(Color.FromRgb(0x5A, 0x5C, 0x64)), 3.4 * k) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round }, pivot, end);
+            g.DrawLine(new Pen(silver, 2.2 * k) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round }, pivot, end);
+            g.PushTransform(new RotateTransform(14, end.X, end.Y));
+            g.DrawRoundedRectangle(new SolidColorBrush(Color.FromRgb(0x9A, 0x9C, 0xA4)), new Pen(new SolidColorBrush(Color.FromRgb(0x3A, 0x3A, 0x40)), 0.8 * k), new Rect(end.X - 4 * k, end.Y - 2 * k, 8 * k, 13 * k), 1.5 * k, 1.5 * k);
+            g.Pop();
+            g.DrawEllipse(new RadialGradientBrush(Color.FromRgb(0xC8, 0xCA, 0xD0), Color.FromRgb(0x50, 0x52, 0x5A)), new Pen(new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x30)), 1 * k), pivot, 8 * k, 8 * k);
+            g.DrawEllipse(new SolidColorBrush(Color.FromRgb(0x2E, 0x2E, 0x36)), null, pivot, 3.2 * k, 3.2 * k);
+        }
+        var arm = new System.Windows.Media.Imaging.RenderTargetBitmap((int)Math.Ceiling(w), (int)Math.Ceiling(h), 96, 96, PixelFormats.Pbgra32);
+        arm.Render(armVisual);
+        arm.Freeze();
+        _surface.SetTurntable(disc, arm, new System.Numerics.Vector2((float)pivot.X, (float)pivot.Y));
+        _surface.SetSpinning(_media.IsPlaying);
+    }
+
     /// <summary>After a change of resolution or screen: fit the island to the new size.</summary>
     public void ScreenChanged()
     {

@@ -540,6 +540,7 @@ public partial class IslandWindow : Window
         var s = Settings.Current;
         ApplyColor();
         SendGrid();
+        SendTurntable();
         // Form: 0 floating, 1 docked to the top edge, 2 capsule (narrower and taller, round cover)
         Island.Margin = new Thickness(0, s.IslandShape == 1 ? 0 : 8, 0, 0);
         Compact.Height = CompactH;
@@ -608,6 +609,7 @@ public partial class IslandWindow : Window
         ShowEqualizer();
         UpdateProgress();
         UpdateNotchPet();
+        _surface.SetSpinning(_media.IsPlaying);
     }
 
     // ---------- music glow ----------
