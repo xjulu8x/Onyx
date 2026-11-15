@@ -12,7 +12,9 @@ public partial class IslandWindow : Window
     private const double ExpandedW = 820, ExpandedH = 330, ExpandedRadius = 24; // scaled by IslandCorners (0.3 in the terminal look)
     private const double WindowW = 900, WindowH = 380; // room for the open panel and its spring
     private static bool Capsule => Settings.Current.IslandShape == 2;
-    private double CompactW => (Capsule ? 200 : 260) + (_flash != null ? 70 : 0); // wider while a hint shows
+    private double CompactW => (Capsule ? 200 : 260) + (_flash != null || LiveActivity != null ? 90 : 0); // wider while a hint or a live activity shows
+    /// <summary>The most important live activity (call, timer, download), or null.</summary>
+    private static Activity LiveActivity => LiveActivities.Current.Count > 0 ? LiveActivities.Current[0] : null;
     private static double CompactH => Capsule ? 40 : 34;
     private static double CompactRadius => CompactH / 2;
     private static readonly IEasingFunction Ease = new CubicEase { EasingMode = EasingMode.EaseOut };
@@ -39,6 +41,8 @@ public partial class IslandWindow : Window
 
         _sys.Updated += CheckHeat;
         _media.Updated += UpdateMedia;
+        LiveActivities.Changed += () => Dispatcher.BeginInvoke(RefreshCompact);
+        LiveActivities.TimerDone += () => Dispatcher.BeginInvoke(() => { Flash("TIMER ABGELAUFEN"); System.Media.SystemSounds.Asterisk.Play(); Pet.React("track"); NotchPet.React("track"); });
         _media.TrackChanged += () => Dispatcher.BeginInvoke(() => { Pet.React("track"); NotchPet.React("track"); });
         TaskbarWindow.FullscreenChanged += full => { _forGame = full; if (full) Hide(); else Show(); _surface.SetVisible(!full); };
         VolSlider.Changed += (v, muted) =>
@@ -427,6 +431,7 @@ public partial class IslandWindow : Window
 
     // ---------- cover and title on the GPU ----------
 
+    private string _lastKind;
     private const double TextScale = 2; // images are rendered sharper than shown
     private string _smallKey, _bigKey;
     private object _artKey = new();
@@ -473,7 +478,11 @@ public partial class IslandWindow : Window
             both.Children.Add(artist);
             big = Render(both, 284, 40);
         }
-        _surface.SetMedia(art, small, big);
+        // A new kind of text (song, hint, call, download) fades over; the same kind with new numbers just updates.
+        string kind = _flash != null ? "flash:" + _flash : _heatText != null ? "heat" : LiveActivity?.Key ?? (_media.HasSession ? "song:" + _media.Title : "time");
+        bool fade = kind != _lastKind;
+        if (small != null) _lastKind = kind;
+        _surface.SetMedia(art, small, big, fade);
         foreach (var hidden in new UIElement[] { Art, CompactArt, CompactTitle, TitleText, Artist }) hidden.Opacity = 0;
         ArtIcon.Visibility = CompactArtIcon.Visibility = Visibility.Collapsed;
     }
@@ -598,7 +607,7 @@ public partial class IslandWindow : Window
         bool has = _media.HasSession;
         TitleText.Text = has ? _media.Title : "Nichts wird abgespielt";
         Artist.Text = has ? _media.Artist : "";
-        CompactTitle.Text = _flash ?? _heatText ?? (has ? _media.Title : IdleText());
+        CompactTitle.Text = _flash ?? _heatText ?? LiveActivity?.Text ?? (has ? _media.Title : IdleText());
         PlayBtn.Content = _media.IsPlaying ? "" : "";
         SourceText.Text = has ? _media.Source.ToUpperInvariant() : "";
         OutputText.Text = Volume.DeviceName() ?? "";
@@ -682,7 +691,15 @@ public partial class IslandWindow : Window
     /// <summary>The hairline in the notch; only touched when it moves by a whole pixel, so the window is rarely redrawn.</summary>
     private void CompactProgress()
     {
-        bool show = _media.HasSession && _media.Duration.TotalSeconds > 0 && _flash == null && _heatText == null;
+        // A live activity with progress (timer, Steam) uses the line; otherwise it shows how far the song is.
+        if (LiveActivity?.Progress is { } done && _flash == null && _heatText == null)
+        {
+            CompactTrack.Visibility = Visibility.Visible;
+            double w = Math.Round(CompactTrack.ActualWidth * Math.Clamp(done, 0, 1));
+            if (Math.Abs(CompactFill.Width - w) >= 1) CompactFill.Width = w;
+            return;
+        }
+        bool show = _media.HasSession && _media.Duration.TotalSeconds > 0 && _flash == null && _heatText == null && LiveActivity == null;
         CompactTrack.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         if (!show) return;
         double width = Math.Round(CompactTrack.ActualWidth * Math.Clamp(_media.Position.TotalSeconds / _media.Duration.TotalSeconds, 0, 1));

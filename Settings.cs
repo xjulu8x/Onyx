@@ -4,6 +4,14 @@ using Microsoft.Win32;
 
 namespace DesktopOverlay;
 
+/// <summary>What Onyx does while a certain game is in front.</summary>
+public class GameProfile
+{
+    public string Name { get; set; }
+    public bool Crosshair { get; set; }
+    public double? Vibrance { get; set; } // null: leave the saturation as it is
+}
+
 public class PinItem
 {
     public string Key { get; set; }
@@ -109,6 +117,12 @@ public class Settings
     public double CrosshairGap { get; set; } = 3;
     public bool CrosshairOutline { get; set; } = true;
     public double CrosshairOpacity { get; set; } = 1;
+
+    // Game mode (2.11)
+    public bool GameHud { get; set; } = true;
+    public int GameHudCorner { get; set; } // 0 top left, 1 top right, 2 bottom left, 3 bottom right
+    public bool CrosshairOnlyInGame { get; set; } = true;
+    public Dictionary<string, GameProfile> GameProfiles { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     // Time-of-day design and own themes
     public bool AutoTheme { get; set; }

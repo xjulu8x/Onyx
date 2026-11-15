@@ -200,7 +200,7 @@ internal sealed class IslandSurface
     }
 
     /// <summary>New cover and texts; null keeps the current image.</summary>
-    public void SetMedia(System.Windows.Media.Imaging.BitmapSource art, System.Windows.Media.Imaging.BitmapSource small, System.Windows.Media.Imaging.BitmapSource big)
+    public void SetMedia(System.Windows.Media.Imaging.BitmapSource art, System.Windows.Media.Imaging.BitmapSource small, System.Windows.Media.Imaging.BitmapSource big, bool fade = true)
     {
         if (!MediaReady) return;
         try
@@ -212,7 +212,13 @@ internal sealed class IslandSurface
                 var next = _smallFront == _smallText ? _smallTextB : _smallText;
                 next.Brush = Upload(small);
                 next.Size = new Vector2(small.PixelWidth, small.PixelHeight) * _textScale;
-                if (!_open)
+                if (!_open && !fade)
+                {
+                    // Same kind of text, new numbers (a download, a timer): swap at once, no blinking.
+                    _smallFront.StopAnimation("Opacity"); _smallFront.Opacity = 0;
+                    next.StopAnimation("Opacity"); next.Opacity = 1;
+                }
+                else if (!_open)
                 {
                     Fade(_smallFront, 0, true, 0, 90);
                     Fade(next, 1, true, 50, 160);

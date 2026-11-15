@@ -493,8 +493,28 @@ public partial class SettingsWindow : Window
     private void Game()
     {
         var cross = App.Crosshair;
+        // Game mode: what happens while a game runs.
+        var gameMode = Section("Spiel-Modus");
+        Switch(gameMode, "Spiel-HUD", _s.GameHud, v => { _s.GameHud = v; GameMode.Refresh(); }, "CPU, GPU, RAM, Ping und Uhrzeit klein in einer Ecke, nur im Spiel.");
+        Chips(gameMode, "HUD-Ecke", new[] { "Oben links", "Oben rechts", "Unten links", "Unten rechts" }, _s.GameHudCorner, i => { _s.GameHudCorner = i; GameMode.Refresh(); });
+        Switch(gameMode, "Crosshair nur im Spiel", _s.CrosshairOnlyInGame, v => { _s.CrosshairOnlyInGame = v; cross.Apply(); }, "Auf dem Desktop bleibt es aus.");
+
+        // Every game Onyx has seen gets its own crosshair and saturation.
+        if (_s.GameProfiles.Count > 0)
+        {
+            var games = Section("Deine Spiele");
+            foreach (var (exe, profile) in _s.GameProfiles.OrderBy(p => p.Value.Name, StringComparer.CurrentCultureIgnoreCase).ToList())
+            {
+                Switch(games, $"{profile.Name}: Crosshair", profile.Crosshair, v => { profile.Crosshair = v; GameMode.Refresh(); });
+                if (Vibrance.Available)
+                    Slider(games, $"{profile.Name}: Sättigung", 0, 1, () => profile.Vibrance ?? Vibrance.Read() ?? 0.5, v => { profile.Vibrance = Math.Round(v, 3); GameMode.Refresh(); }, v => $"{v * 100:0} %");
+            }
+            ActionRow(games, "Liste leeren", "Onyx lernt die Spiele beim nächsten Start neu.", "Leeren", () => { _s.GameProfiles.Clear(); _s.Save(); Reload(); });
+        }
+        else Section("Deine Spiele").Children.Add(new TextBlock { Text = "Starte ein Spiel im Vollbild: Onyx legt dafür ein eigenes Profil an.", FontFamily = Theme.Mono, FontSize = 10, Foreground = Dim, Margin = new Thickness(0, 10, 0, 10), TextWrapping = TextWrapping.Wrap });
+
         var c = Section("Crosshair");
-        Switch(c, "Crosshair anzeigen", _s.CrosshairOn, v => { _s.CrosshairOn = v; cross.Apply(); }, "Über Spielen im Rahmenlos- oder Fenstermodus; exklusives Vollbild zeichnet über alles.");
+        Switch(c, "Crosshair an", _s.CrosshairOn, v => { _s.CrosshairOn = v; cross.Apply(); }, "Für neue Spiele; jedes Spiel merkt sich seinen eigenen Wert (siehe oben). Exklusives Vollbild zeichnet über jedes Overlay.");
         Pick(c, "Form", CrosshairWindow.Styles, _s.CrosshairStyle, i => { _s.CrosshairStyle = i; cross.Apply(); });
         Pick(c, "Farbe", CrosshairWindow.ColorNames, Array.IndexOf(CrosshairWindow.Colors, _s.CrosshairColor), i => { _s.CrosshairColor = CrosshairWindow.Colors[i]; cross.Apply(); });
         Slider(c, "Länge", 2, 30, () => _s.CrosshairSize, v => { _s.CrosshairSize = Math.Round(v); cross.Apply(); }, v => $"{v:0} px");

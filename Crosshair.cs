@@ -47,16 +47,21 @@ public sealed class CrosshairWindow : Window
         Top = (SystemParameters.PrimaryScreenHeight - Box) / 2;
     }
 
+    /// <summary>Shows it as set: in a game its profile decides, on the desktop only if it is not limited to games.</summary>
     public void Apply()
     {
-        if (Settings.Current.CrosshairOn)
-        {
-            Center();
-            Show();
-            ((Mark)Content).InvalidateVisual();
-            Native.BringTopmost(this);
-        }
-        else Hide();
+        var s = Settings.Current;
+        if (GameMode.Current != null) { GameMode.Refresh(); return; }
+        Show(s.CrosshairOn && !s.CrosshairOnlyInGame);
+    }
+
+    public void Show(bool visible)
+    {
+        if (!visible) { Hide(); return; }
+        Center();
+        Show();
+        ((Mark)Content).InvalidateVisual();
+        Native.BringTopmost(this);
     }
 
     private sealed class Mark : FrameworkElement

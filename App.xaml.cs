@@ -100,6 +100,8 @@ public partial class App : Application
         Taskbar.Show();
         Crosshair = new CrosshairWindow();
         Crosshair.Apply();
+        LiveActivities.Start();
+        GameMode.Start();
         // Saturation chosen in Onyx comes back after a restart (the driver may have reset it).
         if (Settings.Current.VibranceLevel is { } vibrance) Vibrance.Set(vibrance);
         // New resolution or screen: island, dock, crosshair and widgets follow at once.
