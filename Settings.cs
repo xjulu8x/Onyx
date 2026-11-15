@@ -108,6 +108,12 @@ public class Settings
     public string SteamId { get; set; } = "";
     public string DiscordToken { get; set; } = "";
     public int PetShading { get; set; } = 2; // 0 flat, 1 soft, 2 strong
+    // 3D character (2.12): 0 soft toy, 1 voxels, 2 the old pixel art
+    public int PetStyle { get; set; }
+    public int PetMaterial { get; set; } = 1; // 0 matte, 1 glossy, 2 velvet, 3 metal
+    public double PetHead { get; set; } = 1;
+    public double PetEyeSize { get; set; } = 1;
+    public double PetEarSize { get; set; } = 1;
     public double? VibranceLevel { get; set; } // saturation chosen in Onyx; null = leave the driver alone
     public bool CrosshairOn { get; set; }
     public int CrosshairStyle { get; set; } = 1;

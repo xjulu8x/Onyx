@@ -73,6 +73,15 @@ public partial class IslandWindow : Window
     public async void Demo()
     {
         await Task.Delay(5000);
+        var args = Environment.GetCommandLineArgs();
+        if (args.Contains("--open"))
+        {
+            // Load test: stays open a while (the character runs), then closes.
+            SetExpanded(true);
+            await Task.Delay(26000);
+            SetExpanded(false);
+            return;
+        }
         for (int i = 0; i < 6; i++) { SetExpanded(i % 2 == 0); await Task.Delay(1000); }
         Flash("Caps Lock an");
         await Task.Delay(1200);

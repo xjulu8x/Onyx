@@ -130,6 +130,8 @@ public partial class App : Application
         Theme.StartAutoTheme();
 
         if (e.Args.Contains("--probe")) Probe();
+        var style = Array.IndexOf(e.Args, "--style"); // test aid: another character style for this run only (not saved)
+        if (style >= 0 && style + 1 < e.Args.Length && int.TryParse(e.Args[style + 1], out var st)) Settings.Current.PetStyle = st;
         if (e.Args.Contains("--demo")) Island.Demo();
         var snap = Array.IndexOf(e.Args, "--snapshot");
         if (snap >= 0 && snap + 1 < e.Args.Length) Snapshot(e.Args[snap + 1], e.Args.Contains("tray") ? FlyoutKind.Tray : FlyoutKind.ActionCenter);
@@ -291,6 +293,52 @@ public partial class App : Application
             settings.Close();
         }
         catch (Exception ex) { System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "settings-error.txt"), ex.ToString()); }
+        if (Environment.GetCommandLineArgs().Contains("--pets"))
+        {
+            // Test aid: every part option in both 3D styles as a picture grid.
+            try
+            {
+                var rows = new List<(string Name, Action<Settings, int> Set, int Count)>
+                {
+                    ("Vorlagen", (s, i) => PixelPet.Presets[i].Apply(s), PixelPet.Presets.Length),
+                    ("Körper", (s, i) => s.PetShape = i, PixelPet.Shapes.Length),
+                    ("Ohren", (s, i) => s.PetEars = i, PixelPet.EarKinds.Length),
+                    ("Augen", (s, i) => s.PetEyes = i, PixelPet.EyeKinds.Length),
+                    ("Mund", (s, i) => s.PetMouth = i, PixelPet.Mouths.Length),
+                    ("Muster", (s, i) => s.PetPattern = i, PixelPet.Patterns.Length),
+                    ("Hut", (s, i) => s.PetHat = i, PixelPet.Hats.Length),
+                    ("Accessoire", (s, i) => s.PetAccessory = i, PixelPet.Accessories.Length),
+                    ("Material", (s, i) => s.PetMaterial = i, PixelPet.Materials.Length),
+                };
+                var timing = new System.Text.StringBuilder();
+                foreach (int style in new[] { 0, 1 })
+                {
+                    var watch = System.Diagnostics.Stopwatch.StartNew();
+                    var sheet = new System.Windows.Media.DrawingVisual();
+                    using (var g = sheet.RenderOpen())
+                    {
+                        g.DrawRectangle(new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x14, 0x14, 0x16)), null, new Rect(0, 0, 9 * 130, rows.Count * 165));
+                        for (int r = 0; r < rows.Count; r++)
+                            for (int i = 0; i < rows[r].Count; i++)
+                            {
+                                var look = PixelPet.Copy(Settings.Current);
+                                look.PetStyle = style;
+                                rows[r].Set(look, i);
+                                g.DrawImage(PixelPet.Composite(look), new Rect(i * 130, r * 165, 128, 160));
+                            }
+                    }
+                    timing.AppendLine($"style {style}: {watch.ElapsedMilliseconds} ms");
+                    var all = new System.Windows.Media.Imaging.RenderTargetBitmap(9 * 130, rows.Count * 165, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+                    all.Render(sheet);
+                    var enc3 = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                    enc3.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(all));
+                    using var f3 = System.IO.File.Create(System.IO.Path.Combine(dir, $"pets-{style}.png"));
+                    enc3.Save(f3);
+                }
+                System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "pets-time.txt"), timing.ToString());
+            }
+            catch (Exception ex) { System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "pets-error.txt"), ex.ToString()); }
+        }
         if (Environment.GetCommandLineArgs().Contains("--film"))
         {
             // Test aid: 16 frames of the character over 4 seconds side by side, to check its motion.

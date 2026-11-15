@@ -21,6 +21,8 @@ public sealed class PixelPet : FrameworkElement
     public static readonly string[] Hats = { "Keiner", "Kappe", "Krone", "Kopfhörer", "Mütze", "Heiligenschein", "Blume", "Schleife", "Zauberhut" };
     public static readonly string[] Accessories = { "Keins", "Brille", "Sonnenbrille", "Schal", "Fliege", "Glocke" };
     public static readonly string[] Shadings = { "Flach", "Weich", "Stark" };
+    public static readonly string[] Styles = { "Weich 3D", "Voxel 3D", "Pixel" };
+    public static readonly string[] Materials = { "Matt", "Glänzend", "Samt", "Metall" };
 
     /// <summary>Ready-made characters; each sets every part and color.</summary>
     public static readonly (string Name, Action<Settings> Apply)[] Presets =
@@ -97,13 +99,69 @@ public sealed class PixelPet : FrameworkElement
     {
         _timer.Tick += (_, _) => Step();
         Cursor = Cursors.Hand;
-        MouseLeftButtonUp += (_, _) => Poke();
+        _over = new Layer(DrawBits);
+        AddVisualChild(_over);
+        MouseLeftButtonDown += (_, e) =>
+        {
+            if (!Spinnable) return;
+            _dragging = true;
+            _downX = _lastDragX = e.GetPosition(this).X;
+            CaptureMouse();
+        };
+        MouseMove += (_, e) =>
+        {
+            if (!_dragging) return;
+            double x = e.GetPosition(this).X;
+            _spin += (x - _lastDragX) * 1.3; // drag to turn the character by hand
+            _lastDragX = x;
+            InvalidateVisual();
+        };
+        MouseLeftButtonUp += (_, e) =>
+        {
+            if (_dragging)
+            {
+                _dragging = false;
+                ReleaseMouseCapture();
+                if (Math.Abs(e.GetPosition(this).X - _downX) > 4) return;
+            }
+            Poke();
+        };
         IsVisibleChanged += (_, _) => Apply();
         SnapsToDevicePixels = true;
         RenderOptions.SetBitmapScalingMode(this, BitmapScalingMode.NearestNeighbor); // hard pixel edges when scaled up
     }
 
     public bool Running { set { _wantRun = value; Apply(); } }
+
+    /// <summary>The model can be turned by dragging (the preview in the settings).</summary>
+    public bool Spinnable { get; set; }
+    private bool _dragging;
+    private double _downX, _lastDragX, _spin;
+
+    // The 3D model and the layer for particles above it.
+    private PetFigure _fig;
+    private readonly Layer _over;
+    private readonly MatrixTransform _place = new();
+    private double _tiltR, _tiltP, _lx = -0.4, _ly = 0.9, _walk;
+
+    private sealed class Layer : FrameworkElement
+    {
+        private readonly Action<DrawingContext> _draw;
+        public Layer(Action<DrawingContext> draw) { _draw = draw; IsHitTestVisible = false; }
+        protected override void OnRender(DrawingContext dc) => _draw(dc);
+    }
+
+    private static bool Is3D => Settings.Current.PetStyle != 2;
+
+    protected override int VisualChildrenCount => _fig != null ? 2 : 1;
+    protected override Visual GetVisualChild(int index) => _fig != null && index == 0 ? _fig.View : _over;
+
+    protected override Size ArrangeOverride(Size size)
+    {
+        _over.Arrange(new Rect(size));
+        if (_fig != null) _fig.View.Arrange(new Rect(0, 0, _fig.View.Width, _fig.View.Height));
+        return size;
+    }
 
     private double Fps => Compact ? 12 : 20; // smooth motion; resting frames are skipped below
 
@@ -134,7 +192,19 @@ public sealed class PixelPet : FrameworkElement
     private static bool On(int bit) => (Settings.Current.PetFx & (1 << bit)) != 0;
 
     /// <summary>Rows of the sprite that hold something: the empty space above ears and hats doesn't count, so the character fills its place.</summary>
-    private static int VisibleRows => H - ContentTop(Settings.Current);
+    private static int VisibleRows => Rows(Settings.Current);
+
+    private static readonly Dictionary<string, int> RowCache = new();
+
+    /// <summary>How many grid rows the standing character fills, from the floor to the tips of ears and hat.</summary>
+    public static int Rows(Settings s)
+    {
+        if (s.PetStyle == 2) return H - ContentTop(s);
+        string key = PetFigure.KeyOf(s);
+        if (RowCache.TryGetValue(key, out var rows)) return rows;
+        if (RowCache.Count > 200) RowCache.Clear();
+        return RowCache[key] = Math.Max(22, new PetLook(s).Rows());
+    }
 
     /// <summary>
     /// Size of one sprite pixel on screen. The character fills the height it has (the "Größe" setting scales that),
@@ -154,7 +224,14 @@ public sealed class PixelPet : FrameworkElement
     }
 
     // Takes the room it is given; only without a limit it asks for its natural height (asking for more would clip it).
-    protected override Size MeasureOverride(Size available) => new(
+    protected override Size MeasureOverride(Size available)
+    {
+        _over.Measure(available);
+        _fig?.View.Measure(new Size(_fig.View.Width, _fig.View.Height));
+        return Natural(available);
+    }
+
+    private Size Natural(Size available) => new(
         double.IsInfinity(available.Width) ? 300 : available.Width,
         double.IsInfinity(available.Height) ? (Compact ? 32 : 140 * Zoom) : Math.Min(available.Height, Compact ? 32 : 140 * Zoom));
 
@@ -323,11 +400,12 @@ public sealed class PixelPet : FrameworkElement
         Secondary(k, music && !Compact);
         _pose = CurrentPose(music && !Compact);
         var look = (Math.Round(_x * 2), Math.Round(_hop * 2), _bits.Count, _facing, Math.Round(_squash, 2), _trail.Count, _pose, Sleeping ? _frame / Frames(1) : 0);
-        double moved = Math.Round(_crouch * 20) * 0.001 + Math.Round(_earRot) + Math.Round(_armL) * 64 + Math.Round(_turn * 8) * 4096 + Math.Round(_hatLag) * 65536 + Math.Round(_footL * 3 + _footR * 7) * 1048576;
+        double moved = Math.Round(_spin) * 7e-6 + Math.Round(_walk * 10) * 3e-5 + Math.Round(_crouch * 20) * 0.001 + Math.Round(_earRot) + Math.Round(_armL) * 64 + Math.Round(_turn * 8) * 4096 + Math.Round(_hatLag) * 65536 + Math.Round(_footL * 3 + _footR * 7) * 1048576;
         if (Compact && look == _lastLook && moved == _lastMoved && _bits.Count == 0) return; // the big one keeps breathing
         _lastMoved = moved;
         _lastLook = look;
         InvalidateVisual();
+        _over.InvalidateVisual();
     }
 
     private Pose _pose;
@@ -466,6 +544,8 @@ public sealed class PixelPet : FrameworkElement
         _footR += (liftR - _footR) * (1 - Math.Pow(0.4, k));
 
         _turn += (_facing - _turn) * (1 - Math.Pow(0.5, k));
+        _walk += ((walking ? 1 : 0) - _walk) * (1 - Math.Pow(0.6, k));
+        if (!_dragging) _spin *= Math.Pow(0.93, k); // a turn by hand slowly comes back
     }
 
     // ---------- drawing ----------
@@ -501,7 +581,13 @@ public sealed class PixelPet : FrameworkElement
 
         // Shadow, smaller while in the air.
         double shadow = Math.Max(3, 10 - _hop / (2 * p)) * p;
-        if (!Compact) dc.DrawRectangle(Frozen(Color.FromArgb(0x30, 255, 255, 255)), null, new Rect(_x + W * p / 2 - shadow, ActualHeight - 2, shadow * 2, Math.Max(1, p * 0.75)));
+        if (!Compact && Is3D)
+        {
+            // A soft pool under the model: dark in the middle with a faint light rim, so it reads on the dark panel.
+            double rx = shadow * 1.25, ry = Math.Max(2, p * 1.6) * (shadow / (10 * p));
+            dc.DrawEllipse(ShadowBrush, null, new Point(_x + W * p / 2, ActualHeight - 1.5), rx, ry);
+        }
+        else if (!Compact) dc.DrawRectangle(Frozen(Color.FromArgb(0x30, 255, 255, 255)), null, new Rect(_x + W * p / 2 - shadow, ActualHeight - 2, shadow * 2, Math.Max(1, p * 0.75)));
 
         // Sitting down and getting up glide instead of jumping; walking bobs with each step; resting breathes.
         double t = _frame / Fps;
@@ -509,6 +595,8 @@ public sealed class PixelPet : FrameworkElement
         double cx = _x + W * p / 2, bottom = ActualHeight - (Compact ? 0 : 1) - _hop + _sink - bob;
         double breathe = 1 + Math.Sin(t * (Sleeping ? 1.6 : 2.4)) * (Sleeping ? 0.03 : 0.012);
         // Turning: the character narrows through its middle and opens up the other way.
+        if (Is3D) { Draw3D(s, p, cx, bottom - _sink, breathe); return; }
+        if (_fig != null) { RemoveVisualChild(_fig.View); _fig = null; InvalidateMeasure(); }
         double turn = Math.Sign(_turn == 0 ? _facing : _turn) * Math.Max(0.12, Math.Abs(_turn));
         dc.PushTransform(new TranslateTransform(cx, bottom));
         dc.PushTransform(new ScaleTransform(turn * (2 - _squash) * (1 + (1 - _crouch) * 0.35), _squash * breathe * _crouch));
@@ -540,8 +628,66 @@ public sealed class PixelPet : FrameworkElement
         _ = gbottom;
         dc.Pop();
         dc.Pop();
+    }
 
+    private void DrawBits(DrawingContext dc)
+    {
+        double p = Pixel;
         foreach (var b in _bits) DrawBit(dc, b, Compact ? 1 : Math.Max(1, p * 0.6));
+    }
+
+    /// <summary>
+    /// The 3D model: placed and squashed like the picture was, then its joints follow the same springs. Turning is a
+    /// real turn in space, the head leans toward the mouse, and the light comes from the same side as before.
+    /// </summary>
+    private void Draw3D(Settings s, double p, double cx, double bottom, double breathe)
+    {
+        if (_fig == null)
+        {
+            _fig = new PetFigure(Compact);
+            _fig.View.RenderTransform = _place;
+            // The particles stay on top: draw order follows the child order.
+            RemoveVisualChild(_over);
+            AddVisualChild(_fig.View);
+            AddVisualChild(_over);
+        }
+        double vw = PetFigure.WorldW * p, vh = PetFigure.WorldH * p;
+        if (double.IsNaN(_fig.View.Width) || Math.Abs(_fig.View.Width - vw) > 0.01)
+        {
+            _fig.View.Width = vw; _fig.View.Height = vh;
+            InvalidateMeasure();
+        }
+        double sx = (2 - _squash) * (1 + (1 - _crouch) * 0.35), sy = _squash * breathe * _crouch;
+        var m = Matrix.Identity;
+        m.Translate(cx - vw / 2, bottom - PetFigure.GroundY(p));
+        m.ScaleAt(sx, sy, cx, bottom);
+        _place.Matrix = m;
+
+        double t = _frame / Fps;
+        bool dancing = MediaService.Instance.IsPlaying && s.PetDance && !Compact;
+        double phase = _stride / (3.5 * p) * Math.PI;
+        int lookWorld = _lookX * _facing;
+        double yaw = _turn * 26 + Math.Sign(_vel) * Math.Min(1, Math.Abs(_vel) / 1.2) * 34 * _walk + _spin;
+        double roll = -lookWorld * 5 + (dancing ? Math.Sin(t * 7.5) * 6 : 0) + (Sleeping ? 7 : 0);
+        double pitch = _lookY * 6 + (Sleeping ? 9 : 0);
+        _tiltR += (roll - _tiltR) * 0.3;
+        _tiltP += (pitch - _tiltP) * 0.3;
+        double a = LightAngles[Math.Clamp(_light, 0, LightAngles.Length - 1)] * Math.PI / 180;
+        _lx += (Math.Cos(a) * _facing - _lx) * 0.2;
+        _ly += (-Math.Sin(a) - _ly) * 0.2;
+        double sit = Math.Clamp(_sink / (2 * p), 0, 1);
+        var rig = new PetRig
+        {
+            Yaw = yaw, Roll = _tiltR, Pitch = _tiltP,
+            ArmL = _armL * (1 - _walk), ArmR = -_armR * (1 - _walk),
+            SwingL = Math.Sin(phase) * 30 * _walk, SwingR = -Math.Sin(phase) * 30 * _walk,
+            Ears = -_earRot, HatRot = -_hatRot, HatLift = -_hatLag / p,
+            FootL = _footL * 1.3, FootR = _footR * 1.3,
+            StepL = Math.Sin(phase) * 1.4 * _walk + sit * 1.8, StepR = -Math.Sin(phase) * 1.4 * _walk + sit * 1.8,
+            Sink = sit * 2, LightX = _lx, LightY = _ly, Wave = _pose.Wave,
+            Face = new FaceState(_pose.Closed, _pose.Half, _pose.Open, _pose.Mood, lookWorld, _pose.LookY),
+        };
+        _fig.Pose(s, rig);
     }
 
     private static readonly Dictionary<string, string[]> Shapes2 = new()
@@ -563,6 +709,19 @@ public sealed class PixelPet : FrameworkElement
         for (int r = 0; r < map.Length; r++)
             for (int c = 0; c < map[r].Length; c++)
                 if (map[r][c] == 'X') dc.DrawRectangle(brush, null, new Rect(Math.Round(b.X + c * q), Math.Round(b.Y + r * q), q, q));
+    }
+
+    private static readonly Brush ShadowBrush = MakeShadow();
+
+    private static Brush MakeShadow()
+    {
+        var b = new RadialGradientBrush();
+        b.GradientStops.Add(new GradientStop(Color.FromArgb(0x90, 0, 0, 0), 0));
+        b.GradientStops.Add(new GradientStop(Color.FromArgb(0x50, 0, 0, 0), 0.55));
+        b.GradientStops.Add(new GradientStop(Color.FromArgb(0x22, 255, 255, 255), 0.85));
+        b.GradientStops.Add(new GradientStop(Color.FromArgb(0, 255, 255, 255), 1));
+        b.Freeze();
+        return b;
     }
 
     private static readonly Dictionary<(Color, double), Brush> BrushCache = new();
@@ -607,6 +766,7 @@ public sealed class PixelPet : FrameworkElement
     /// <summary>All parts in one picture, for the small tiles in the settings.</summary>
     public static BitmapSource Composite(Settings s)
     {
+        if (s.PetStyle != 2) return PetFigure.Picture(s, 128, 160);
         string key = "all|" + string.Join("|", typeof(Settings).GetProperties().Where(p => p.Name.StartsWith("Pet")).Select(p => p.GetValue(s)));
         if (SpriteCache.TryGetValue(key, out var cached)) return cached;
         var all = new char[H * S, W * S];

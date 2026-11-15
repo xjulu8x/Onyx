@@ -540,7 +540,7 @@ public partial class SettingsWindow : Window
     private void Character()
     {
         // ---- stage: big live preview on the left, name, templates and quick keys on the right ----
-        var preview = new PixelPet { Zoom = 2.2, Margin = new Thickness(0, 4, 0, 0) };
+        var preview = new PixelPet { Zoom = 2.2, Margin = new Thickness(0, 4, 0, 0), Spinnable = true };
         var stage = new Border
         {
             Background = Theme.DotGrid(Color.FromRgb(0x0C, 0x0C, 0x0E), 0x20), BorderBrush = Theme.Res("Line"), BorderThickness = new Thickness(1),
@@ -548,12 +548,15 @@ public partial class SettingsWindow : Window
         };
         var tag = new TextBlock { FontFamily = Theme.Mono, FontSize = 10, Foreground = Dim, Margin = new Thickness(2, 0, 0, 6) };
         var tiles = new List<Action>(); // every picture tile redraws itself when the character changes
+        int generation = 0;
         void Changed()
         {
-            tag.Text = $"+ {_s.PetName.ToUpperInvariant()} · LIVE-VORSCHAU · KLICKEN ZUM ANTIPPEN";
+            tag.Text = $"+ {_s.PetName.ToUpperInvariant()} · LIVE-VORSCHAU · " + (_s.PetStyle == 2 ? "KLICKEN ZUM ANTIPPEN" : "ZIEHEN ZUM DREHEN");
             preview.InvalidateVisual();
             App.Island?.PetChanged();
-            foreach (var refresh in tiles) refresh();
+            // The tiles follow when there is time, so sliders and clicks stay quick; a newer change replaces older ones.
+            int gen = ++generation;
+            foreach (var refresh in tiles) Dispatcher.BeginInvoke(() => { if (gen == generation) refresh(); }, System.Windows.Threading.DispatcherPriority.Background);
         }
         preview.Loaded += (_, _) => preview.Running = true;
 
@@ -631,11 +634,12 @@ public partial class SettingsWindow : Window
                 tile = PictureTile(PixelPet.Copy(_s), names[i], false);
                 tile.MouseLeftButtonUp += (_, _) => { set(_s, index); _s.Save(); Changed(); };
                 tiles.Add(Draw);
-                Draw();
+                Dispatcher.BeginInvoke(Draw, System.Windows.Threading.DispatcherPriority.Background); // 3D pictures take a moment: the page opens first
                 wrap.Children.Add(tile);
             }
             section.Children.Add(wrap);
         }
+        Parts("Stil", PixelPet.Styles, () => _s.PetStyle, (s, i) => s.PetStyle = i);
         Parts("Körper", PixelPet.Shapes, () => _s.PetShape, (s, i) => s.PetShape = i);
         Parts("Ohren", PixelPet.EarKinds, () => _s.PetEars, (s, i) => s.PetEars = i);
         Parts("Augen", PixelPet.EyeKinds, () => _s.PetEyes, (s, i) => s.PetEyes = i);
@@ -643,14 +647,21 @@ public partial class SettingsWindow : Window
         Parts("Muster", PixelPet.Patterns, () => _s.PetPattern, (s, i) => s.PetPattern = i);
         Parts("Hut", PixelPet.Hats, () => _s.PetHat, (s, i) => s.PetHat = i);
         Parts("Accessoire", PixelPet.Accessories, () => _s.PetAccessory, (s, i) => s.PetAccessory = i);
+        Parts("Material", PixelPet.Materials, () => _s.PetMaterial, (s, i) => s.PetMaterial = i);
         Parts("Schattierung", PixelPet.Shadings, () => _s.PetShading, (s, i) => s.PetShading = i);
+
+        // ---- proportions ----
+        var shape = Section("Proportionen");
+        Slider(shape, "Kopf", 0.8, 1.25, () => _s.PetHead, v => { _s.PetHead = Math.Round(v, 2); Changed(); }, v => $"{v * 100:0} %");
+        Slider(shape, "Augen", 0.6, 1.5, () => _s.PetEyeSize, v => { _s.PetEyeSize = Math.Round(v, 2); Changed(); }, v => $"{v * 100:0} %");
+        Slider(shape, "Ohren", 0.5, 1.6, () => _s.PetEarSize, v => { _s.PetEarSize = Math.Round(v, 2); Changed(); }, v => $"{v * 100:0} %");
 
         // ---- colors ----
         var colors = Section("Farben");
         Swatches(colors, "Körper", _s.PetColor, c => { _s.PetColor = c; Changed(); });
         Swatches(colors, "Zweitfarbe", _s.PetColor2, c => { _s.PetColor2 = c; Changed(); });
         Swatches(colors, "Augen", _s.PetEyeColor, c => { _s.PetEyeColor = c; Changed(); });
-        Switch(colors, "Umriss", _s.PetOutline, v => { _s.PetOutline = v; Changed(); }, "Dunkle Kante wie in klassischer Pixel-Art.");
+        Switch(colors, "Umriss", _s.PetOutline, v => { _s.PetOutline = v; Changed(); }, "Dunkle Kante um Körper, Ohren und Hut, wie in Comics.");
         Switch(colors, "Bäckchen", _s.PetCheeks, v => { _s.PetCheeks = v; Changed(); });
 
         // ---- effects ----
