@@ -153,7 +153,7 @@ public partial class IslandWindow
 
 
     /// <summary>Without music the small island shows the character instead of the cover, the time moves to the right.</summary>
-    private bool NotchPetOn => Settings.Current.PetInNotch && !_expanded && !_media.HasSession && _flash == null && _heatText == null;
+    private bool NotchPetOn => Settings.Current.PetInNotch && !_expanded && !_media.HasSession && _heatText == null; // hints show above it, centred
 
     private bool _notchPetShown;
 
@@ -162,7 +162,8 @@ public partial class IslandWindow
         bool on = NotchPetOn;
         NotchPet.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
         NotchPet.Running = on;
-        NotchPet.ObstacleHalfWidth = 26; // the time in the middle: the character has to duck under it
+        // The text in the middle (time or a hint): the character has to duck under it.
+        NotchPet.ObstacleHalfWidth = Math.Max(26, (_flash ?? IdleText()).Length * 3.8);
         if (on == _notchPetShown) return;
         _notchPetShown = on;
         _smallKey = null; // the time moves to the middle (or back), so its picture is made again

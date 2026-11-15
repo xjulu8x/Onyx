@@ -39,6 +39,7 @@ public partial class IslandWindow : Window
 
         _sys.Updated += CheckHeat;
         _media.Updated += UpdateMedia;
+        _media.TrackChanged += () => Dispatcher.BeginInvoke(() => { Pet.React("track"); NotchPet.React("track"); });
         TaskbarWindow.FullscreenChanged += full => { _forGame = full; if (full) Hide(); else Show(); _surface.SetVisible(!full); };
         VolSlider.Changed += (v, muted) =>
         {
@@ -120,6 +121,7 @@ public partial class IslandWindow : Window
                     Expanded.Opacity = 1;
                     _surface.HidePanel();
                     ShowPet();
+                    if ((DateTime.Now - _lastHello).TotalSeconds > 90) { _lastHello = DateTime.Now; Pet.React("hello"); } // waves when you come by now and then
                 }, Dispatcher);
             }
             else
@@ -158,6 +160,7 @@ public partial class IslandWindow : Window
     }
 
     private DispatcherTimer _swap;
+    private DateTime _lastHello;
     public System.Windows.Media.Imaging.BitmapSource LastPanel { get; private set; }
     public void TakePicture() => TakePanelPicture();
 
@@ -366,6 +369,7 @@ public partial class IslandWindow : Window
         _flashTimer ??= new DispatcherTimer(TimeSpan.FromMilliseconds(1800), DispatcherPriority.Normal, (_, _) => { _flashTimer.Stop(); _flash = null; RefreshCompact(); }, Dispatcher);
         _flashTimer.Stop();
         _flash = text;
+        NotchPet.React("flash");
         RefreshCompact();
         _flashTimer.Start();
     }

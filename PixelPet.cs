@@ -119,6 +119,11 @@ public sealed class PixelPet : FrameworkElement
     /// <summary>A click: wakes up, hops and shows hearts and confetti.</summary>
     public void Poke()
     {
+        // A poke surprises it; three quick pokes and it is in love for a moment.
+        _lastEvent = DateTime.Now;
+        _pokes.Enqueue(DateTime.Now);
+        while (_pokes.Count > 0 && (DateTime.Now - _pokes.Peek()).TotalSeconds > 3) _pokes.Dequeue();
+        Feel(_pokes.Count >= 3 ? Love : Surprised, _pokes.Count >= 3 ? 3 : 0.8);
         Start(Act.Idle, Frames(2));
         if (_hop <= 0) _hopSpeed = Compact ? 2.6 : 6.5;
         double p = Pixel, head = ActualHeight - VisibleRows * p;
@@ -314,6 +319,7 @@ public sealed class PixelPet : FrameworkElement
         for (int i = _trail.Count - 1; i >= 0; i--) { var t = _trail[i]; t.Life -= 0.08 * k; if (t.Life <= 0) _trail.RemoveAt(i); else _trail[i] = t; }
 
         // Redraw only when the picture changes, so resting costs next to nothing (most of all in the notch).
+        Mind(music);
         Secondary(k, music && !Compact);
         _pose = CurrentPose(music && !Compact);
         var look = (Math.Round(_x * 2), Math.Round(_hop * 2), _bits.Count, _facing, Math.Round(_squash, 2), _trail.Count, _pose, Sleeping ? _frame / Frames(1) : 0);
@@ -340,7 +346,72 @@ public sealed class PixelPet : FrameworkElement
             Half: _blink is 1 or 3,
             Open: dancing || yawning,
             Wave: _frame / Frames(0.4) % 2,
-            Sit: (_act == Act.Sit || Sleeping) && !walking && !dancing);
+            Sit: (_act == Act.Sit || Sleeping) && !walking && !dancing,
+            Mood: _mood, LookX: _lookX, LookY: _lookY, Light: _light);
+    }
+
+    // ---------- mind: mood, gaze and light ----------
+
+    private int _mood, _transient = -1, _lookX, _lookY, _light = 2, _lookHold = 0;
+    private DateTime _transientUntil, _lastEvent = DateTime.Now, _lightChanged, _lookUntil;
+    private double _wave;
+    private readonly Queue<DateTime> _pokes = new();
+
+    /// <summary>
+    /// Something happened around the character: "hello" (the island opened), "track" (a new song), "flash" (Caps Lock,
+    /// volume). It reacts with a face, a look and sometimes a hop or a wave.
+    /// </summary>
+    public void React(string what)
+    {
+        _lastEvent = DateTime.Now;
+        switch (what)
+        {
+            case "hello": Feel(Happy, 1.4); _wave = 1.4; break;
+            case "track": Feel(Surprised, 0.9); _lookHold = -1; _lookUntil = DateTime.Now.AddSeconds(1.6); if (_hop <= 0) _hopSpeed = Compact ? 2.2 : 5; break;
+            case "flash": _lookHold = 2; _lookUntil = DateTime.Now.AddSeconds(1.2); if (_hop <= 0) _hopSpeed = Compact ? 1.6 : 3; break;
+        }
+    }
+
+    private void Feel(int mood, double seconds)
+    {
+        _transient = mood;
+        _transientUntil = DateTime.Now.AddSeconds(seconds);
+    }
+
+    /// <summary>Works out the face, where the eyes look and where the light comes from; a few times a second.</summary>
+    private void Mind(bool music)
+    {
+        var now = DateTime.Now;
+        if (_transient >= 0 && now > _transientUntil) _transient = -1;
+        var sys = SystemMonitor.Instance;
+        bool hot = sys.CpuTemp > 80 || sys.Cpu > 85;
+        bool night = now.Hour >= 23 || now.Hour < 6;
+        _mood = _transient >= 0 ? _transient
+            : hot ? Hot
+            : music && Settings.Current.PetDance ? Happy
+            : Sleeping || (night && _act is Act.Sit or Act.Idle) ? Sleepy
+            : (now - _lastEvent).TotalSeconds > 45 && _act is Act.Idle or Act.Sit ? Bored
+            : Normal;
+
+        if (_frame % Frames(0.15) != 0) return;
+        if (Sleeping) { _lookX = _lookY = 0; return; }
+        if (!IsVisible || !Native.GetCursorPos(out var cursor)) return;
+        double p = Pixel;
+        var me = PointToScreen(new Point(_x + W * p / 2, ActualHeight - VisibleRows * p * 0.6));
+        double dx = cursor.X - me.X, dy = cursor.Y - me.Y;
+        // Eyes: toward the mouse, in the picture's own direction (it may be facing the other way).
+        if (now < _lookUntil) { _lookX = _lookHold == 2 ? 0 : _lookHold * _facing; _lookY = _lookHold == 2 ? -1 : 0; }
+        else
+        {
+            _lookX = Math.Abs(dx) > 40 ? Math.Sign(dx) * _facing : 0;
+            _lookY = dy < -50 ? -1 : dy > 70 ? 1 : 0;
+        }
+        if (Math.Abs(dx) < 260 && Math.Abs(dy) < 200) _lastEvent = now; // someone is close: not bored
+        // Light: from the mouse when it is near, otherwise from the sun's side for the time of day.
+        int light = Math.Abs(dx) < 600 && Math.Abs(dy) < 400
+            ? (int)Math.Round((Math.Clamp(dx / 300, -1, 1) * _facing + 1) / 2 * (LightAngles.Length - 1))
+            : now.Hour < 11 ? 1 : now.Hour < 15 ? 2 : 3;
+        if (light != _light && (now - _lightChanged).TotalSeconds > 0.4) { _light = light; _lightChanged = now; }
     }
 
     // ---------- secondary motion: parts that follow the body on springs ----------
@@ -380,7 +451,8 @@ public sealed class PixelPet : FrameworkElement
 
         double armL, armR;
         bool yawning = _act == Act.Yawn && _left > _actLength * 0.3;
-        if (dancing) { armL = -70 + Math.Sin(t * 7.5) * 35; armR = -70 + Math.Sin(t * 7.5 + Math.PI) * 35; }
+        if (_wave > 0) { _wave -= k / 11; armL = Math.Sin(t * 1.6) * 4; armR = -125 + Math.Sin(t * 14) * 28; } // waving hello
+        else if (dancing) { armL = -70 + Math.Sin(t * 7.5) * 35; armR = -70 + Math.Sin(t * 7.5 + Math.PI) * 35; }
         else if (yawning) armL = armR = -115;
         else if (walking) { armL = Math.Sin(phase) * 24; armR = -Math.Sin(phase) * 24; }
         else if (Sleeping) armL = armR = 8;
@@ -507,7 +579,14 @@ public sealed class PixelPet : FrameworkElement
 
     // ---------- the sprite ----------
 
-    private readonly record struct Pose(bool Closed, bool Half, bool Open, int Wave, bool Sit);
+    /// <summary>
+    /// What the body picture shows: lids, mouth, waving skirt, sitting, the mood (face), where the eyes look
+    /// (-1..1 each way) and where the light comes from (index into LightAngles).
+    /// </summary>
+    private readonly record struct Pose(bool Closed, bool Half, bool Open, int Wave, bool Sit, int Mood = 0, int LookX = 0, int LookY = 0, int Light = 2);
+
+    private static readonly double[] LightAngles = { 200, 230, 255, 285, 320 }; // degrees: where the light is, seen from the body
+    public const int Normal = 0, Happy = 1, Bored = 2, Surprised = 3, Sleepy = 4, Hot = 5, Love = 6;
 
     /// <summary>Fine pixels per grid pixel: shapes, outline and shading are drawn at twice the grid, so curves stay round and detailed.</summary>
     private const int S = 2;
@@ -707,7 +786,9 @@ public sealed class PixelPet : FrameworkElement
             {
                 if (g[fy, fx] != 'B') continue;
                 double nx = (GX(fx) - cx) / rx, ny = (GY(fy) - cy) / ry;
-                double light = -0.3 * nx - 0.9 * ny;
+                // Light from a direction that moves (mouse, time of day): the body reads as a lit ball, not a flat shape.
+                double a = LightAngles[Math.Clamp(pose.Light, 0, LightAngles.Length - 1)] * Math.PI / 180;
+                double light = (Math.Cos(a) * nx * 0.55 + Math.Sin(a) * ny) * 0.95;
                 bool checker = (fx + fy) % 2 == 0;
                 double Edge(double v, double at) => v - at + (checker ? 0.05 : -0.05); // dithering band around each step
                 char c = s.PetShading switch
@@ -718,12 +799,20 @@ public sealed class PixelPet : FrameworkElement
                 };
                 bool edgeBelow = fy + 1 >= FH || g[fy + 1, fx] == '\0';
                 if (edgeBelow && s.PetShading > 0) c = 's';
+                // Rim light: a thin bright edge on the side away from the light, as if lit from behind too.
+                bool edge = fx == 0 || fy == 0 || fx == FW - 1 || g[fy, fx - 1] == '\0' || g[fy, fx + 1] == '\0' || g[fy - 1, fx] == '\0';
+                if (edge && !edgeBelow && s.PetShading == 2 && light < -0.45) c = 'L';
                 shaded[fy, fx] = c;
             }
         g = shaded;
         // A soft shine on the upper left of the body.
         if (s.PetShading > 0 && shape != 1 && part == Part.Body)
-            Fill(cx - rx * 0.7, cy - ry * 0.9, cx - rx * 0.1, cy - ry * 0.3, (x, y) => Sq((x - (cx - rx * 0.42)) / 1.6) + Sq((y - (cy - ry * 0.62)) / 0.9) <= 1 && GetF((int)(x * S), (int)((y + OY) * S)) != '\0', 'l');
+        {
+            // The shine sits where the light hits, so it wanders with the light.
+            double la = LightAngles[Math.Clamp(pose.Light, 0, LightAngles.Length - 1)] * Math.PI / 180;
+            double shx = cx + Math.Cos(la) * rx * 0.45, shy = cy + Math.Sin(la) * ry * 0.62;
+            Fill(shx - 2.5, shy - 1.5, shx + 2.5, shy + 1.5, (x, y) => Sq((x - shx) / 1.6) + Sq((y - shy) / 0.9) <= 1 && GetF((int)(x * S), (int)((y + OY) * S)) != '\0', 'l');
+        }
 
         // Pattern in the second color, keeping the shading.
         bool BodyF(int fx, int fy) => GetF(fx, fy) is 'B' or 'L' or 'l' or 'S' or 's';
@@ -754,6 +843,10 @@ public sealed class PixelPet : FrameworkElement
         {
         // Face: eyes with a glint, drawn on the fine grid.
         int e1 = shape == 2 ? 12 : 11, e2 = shape == 2 ? 20 : 21, ey = eyeY;
+        // The mood changes the face; the eyes follow the mouse (look) inside their place.
+        int mood = pose.Mood;
+        double lx = pose.LookX * 0.6, ly = pose.LookY * 0.5;
+        bool halfLids = pose.Half || mood is Bored or Sleepy or Hot;
         void Eye(int ex)
         {
             if (pose.Closed && s.PetEyes != 4)
@@ -762,29 +855,54 @@ public sealed class PixelPet : FrameworkElement
                 Fill(ex - 2.2, ey, ex + 2.2, ey + 2, (x, y) => Math.Abs(y - (ey + 1.6 - Sq(x - ex) * 0.12)) <= 0.5, 'E');
                 return;
             }
+            if (mood == Happy)
+            {
+                // Smiling eyes: upward arcs.
+                Fill(ex - 2.5, ey - 1, ex + 2.5, ey + 2, (x, y) => Math.Abs(y - (ey + 1.4 - Sq(x - ex) * 0.22)) <= 0.5 && Math.Abs(x - ex) <= 2.1, 'E');
+                return;
+            }
+            if (mood == Love)
+            {
+                // Heart eyes.
+                Fill(ex - 3, ey - 3, ex + 3, ey + 3, (x, y) =>
+                {
+                    double hx = (x - ex) / 2.2, hy = (y - ey - 0.3) / 2.2;
+                    return Math.Pow(hx * hx + hy * hy - 0.5, 3) - hx * hx * hy * hy * hy * 1.6 <= 0;
+                }, 'P');
+                Ellipse(ex - 0.9, ey - 0.6, 0.45, 0.45, 'W');
+                return;
+            }
+            double ox = ex + lx, oy = ey + ly;
             switch (s.PetEyes)
             {
                 case 0:
-                    Ellipse(ex, ey + 1, 1.25, 1.5, 'E');
-                    SetF((int)((ex - 0.6) * S), (ey + OY + 0) * S + 1, 'W');
+                    Ellipse(ox, oy + 1, 1.25, 1.5, 'E');
+                    Ellipse(ox - 0.5, oy + 0.5, 0.4, 0.4, 'W');
                     break;
                 case 2:
-                    Fill(ex - 2.2, ey, ex + 2.2, ey + 3, (x, y) => Sq((x - ex) / 2.1) + Sq((y - (ey + 1.6)) / 1.4) <= 1 && y > ey + 0.9, 'E');
+                    Fill(ex - 2.2, ey, ex + 2.2, ey + 3, (x, y) => Sq((x - ox) / 2.1) + Sq((y - (oy + 1.6)) / 1.4) <= 1 && y > ey + 0.9, 'E');
                     Fill(ex - 2.4, ey, ex + 2.4, ey + 1, (x, y) => Math.Abs(y - (ey + 0.9)) <= 0.5 && Math.Abs(x - ex) <= 2.3, 'S');
                     break;
                 case 3:
                     Fill(ex - 2.5, ey - 1, ex + 2.5, ey + 2, (x, y) => Math.Abs(y - (ey + 0.2 + Sq(x - ex) * 0.22)) <= 0.5 && Math.Abs(x - ex) <= 2.1, 'E');
                     break;
                 case 5:
-                    Fill(ex - 2.6, ey - 2.6, ex + 2.6, ey + 2.6, (x, y) => Math.Abs(x - ex) + Math.Abs(y - ey) * 0.9 <= 2.4 && (Math.Abs(x - ex) < 0.8 || Math.Abs(y - ey) < 0.8 || Math.Abs(x - ex) + Math.Abs(y - ey) <= 1.6), 'Y');
-                    Ellipse(ex, ey, 0.5, 0.5, 'W');
+                    Fill(ox - 2.6, oy - 2.6, ox + 2.6, oy + 2.6, (x, y) => Math.Abs(x - ox) + Math.Abs(y - oy) * 0.9 <= 2.4 && (Math.Abs(x - ox) < 0.8 || Math.Abs(y - oy) < 0.8 || Math.Abs(x - ox) + Math.Abs(y - oy) <= 1.6), 'Y');
+                    Ellipse(ox, oy, 0.5, 0.5, 'W');
                     break;
                 default:
-                    // Big round eyes: dark with a lighter lower half, a large glint top left and a small one bottom right.
-                    Ellipse(ex - 0.5, ey, 2.25, 2.7, 'E');
-                    Fill(ex - 3, ey, ex + 2, ey + 3, (x, y) => Sq((x - (ex - 0.5)) / 1.6) + Sq((y - (ey + 1.3)) / 1.1) <= 1, 'e');
-                    Ellipse(ex - 1.3, ey - 1.1, 0.9, 0.9, 'W');
-                    SetF((int)((ex + 0.6) * S), (int)((ey + 1.3 + OY) * S), 'W');
+                    // Big eyes with white, a colored iris that looks where the mouse is, a dark pupil and two glints.
+                    bool wide = mood == Surprised;
+                    Ellipse(ex - 0.5, ey, wide ? 2.6 : 2.3, wide ? 3 : 2.7, 'W');
+                    Ellipse(ex - 0.5, ey, wide ? 2.6 : 2.3, wide ? 3 : 2.7, 'W');
+                    double ir = wide ? 1.1 : 1.65;
+                    Ellipse(ex - 0.5 + lx, ey + 0.3 + ly, ir, ir * 1.15, 'E');
+                    Fill(ex - 3, ey, ex + 2, ey + 3, (x, y) => Sq((x - (ex - 0.5 + lx)) / (ir * 0.8)) + Sq((y - (ey + 0.9 + ly)) / (ir * 0.55)) <= 1, 'e');
+                    Ellipse(ex - 0.5 + lx, ey + 0.3 + ly, ir * 0.5, ir * 0.55, 'D');
+                    Ellipse(ex - 1.2 + lx * 0.5, ey - 0.8 + ly * 0.5, 0.7, 0.7, 'W');
+                    SetF((int)((ex + 0.2 + lx) * S), (int)((ey + 1.2 + ly + OY) * S), 'W');
+                    // A thin dark line around the white, so the eye reads at small sizes.
+                    Fill(ex - 3.5, ey - 4, ex + 3, ey + 4, (x, y) => { double d = Sq((x - (ex - 0.5)) / (wide ? 2.6 : 2.3)) + Sq((y - ey) / (wide ? 3 : 2.7)); return d > 1 && d <= 1.35; }, 'O');
                     break;
             }
         }
@@ -793,17 +911,32 @@ public sealed class PixelPet : FrameworkElement
             Fill(7, ey - 2, 25, ey + 2, (x, y) => x >= 7.2 && x <= 24.8 && y >= ey - 2 && y <= ey + 1.6 && !(Sq(x - 16) < 0.3 && y > ey + 0.8), 'V');
             Fill(8, ey - 2, 24, ey - 1, (x, y) => y < ey - 1.3 && x > 8 && x < 24, 'v');
             if (pose.Closed) Rect(8, ey, 24, ey, 'a');
-            else { Ellipse(10.5, ey - 0.8, 1, 0.6, 'W'); Ellipse(12.5, ey - 0.8, 0.4, 0.4, 'W'); }
+            else
+            {
+                // The visor shows the mood as a small display, and its light scans toward the mouse.
+                double scan = 16 + pose.LookX * 5;
+                Ellipse(scan - 4.5, ey - 0.8, 1, 0.6, 'W'); Ellipse(scan - 2.5, ey - 0.8, 0.4, 0.4, 'W');
+                foreach (int ex in new[] { e1, e2 })
+                {
+                    if (mood == Happy) Fill(ex - 2, ey - 1.5, ex + 2, ey + 1.5, (x, y) => Math.Abs(y - (ey + 0.6 - Math.Abs(x - ex) * -0.55 - 1.2)) <= 0.4 && Math.Abs(x - ex) <= 1.6, 'W');
+                    else if (mood == Love) Fill(ex - 2, ey - 2, ex + 2, ey + 2, (x, y) => { double hx = (x - ex) / 1.5, hy = (y - ey) / 1.5; return Math.Pow(hx * hx + hy * hy - 0.5, 3) - hx * hx * hy * hy * hy * 1.6 <= 0; }, 'P');
+                    else if (mood == Surprised) Fill(ex - 2, ey - 2, ex + 2, ey + 2, (x, y) => { double d = Sq(x - ex) + Sq(y - ey + 0.2); return d <= 1.6 && d >= 0.5; }, 'W');
+                    else if (halfLids) Rect(ex - 1, ey, ex + 1, ey, 'W');
+                    else Ellipse(ex + lx, ey - 0.2 + ly * 0.5, 0.8, 1, 'W');
+                }
+            }
         }
         else { Eye(e1); Eye(e2); }
-        // Half-closed lids, for a soft blink.
-        if (pose.Half && !pose.Closed && s.PetEyes != 4)
+        // Half-closed lids: blinking, or a bored, sleepy or overheated look.
+        if (halfLids && !pose.Closed && s.PetEyes != 4 && mood is not Happy and not Love)
             foreach (int ex in new[] { e1, e2 })
-                Fill(ex - 3.5, ey - 3.5, ex + 3, ey + 0.4, (x, y) => y < ey + 0.3 && GetF((int)(x * S), (int)((y + OY) * S)) is 'E' or 'e' or 'W' or 'Y', 'S');
+                Fill(ex - 3.5, ey - 3.5, ex + 3, ey + 0.4, (x, y) => y < ey + 0.3 && GetF((int)(x * S), (int)((y + OY) * S)) is 'E' or 'e' or 'W' or 'Y' or 'D' or 'O', 'S');
 
-        // Mouth on the fine grid: soft curves instead of steps.
+        // Mouth on the fine grid: soft curves instead of steps. The mood can change it.
         double my = ey + (s.PetEyes == 4 ? 4 : 5);
         int mouth = pose.Open && s.PetMouth != 0 && s.PetMouth != 6 ? 4 : s.PetMouth;
+        if (s.PetMouth != 6)
+            mouth = mood switch { Happy => 5, Surprised => 4, Love => 1, Hot => 2, Bored => 7, Sleepy => 8, _ => mouth };
         double mx = 16.5;
         switch (mouth)
         {
@@ -823,6 +956,12 @@ public sealed class PixelPet : FrameworkElement
                 // Beak: lighter top, darker underside.
                 Fill(13, ey + 1.5, 20, ey + 4.5, (x, y) => Math.Abs(x - mx) <= 2.8 - (y - (ey + 1.8)) * 0.9 && y >= ey + 1.8 && y <= ey + 4.3, 'N');
                 Fill(13, ey + 3, 20, ey + 4.5, (x, y) => Math.Abs(x - mx) <= 2.8 - (y - (ey + 1.8)) * 0.9 && y >= ey + 3.2 && y <= ey + 4.3, 'n');
+                break;
+            case 7: // bored: a flat, slightly crooked line
+                Fill(mx - 3, my, mx + 3, my + 2, (x, y) => Math.Abs(y - (my + 1 + (x - mx) * 0.08)) <= 0.4 && Math.Abs(x - mx) <= 1.8, 'E');
+                break;
+            case 8: // sleepy: a small o
+                Ellipse(mx, my + 1.2, 0.8, 0.9, 'E');
                 break;
         }
         if (s.PetCheeks) { Ellipse(e1 - 2.8, my, 1.6, 0.8, 'K'); Ellipse(e2 + 2.8, my, 1.6, 0.8, 'K'); }
